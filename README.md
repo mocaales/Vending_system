@@ -1,5 +1,7 @@
 # Vending System
 
+[![CI](https://github.com/mocaales/Vending_system/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/mocaales/Vending_system/actions/workflows/ci-cd.yml)
+
 Mikrostoritveni sistem za operaterja, ki upravlja več prodajnih avtomatov (meso, mleko, jajca). Operater v spletni aplikaciji ureja avtomate, izdelke in polnitve ter spremlja prodajo, temperaturo in alarme. Kupec na javni strani vidi zemljevid avtomatov in razpoložljive izdelke. Avtomate nadomešča simulator. Ob previsoki temperaturi, izgubi povezave ali nizki zalogi sistem odpre alarm in pošlje e-pošto.
 
 Projekt pri predmetu Storitveno usmerjene arhitekture (FERI UM), skupina_10, november 2026.
@@ -19,6 +21,7 @@ Projekt pri predmetu Storitveno usmerjene arhitekture (FERI UM), skupina_10, nov
 | `frontend/` | Web UI (React, TypeScript, Vite) | Darko |
 | `backend/` | 5 poslovnih storitev, API Gateway in Frontend API, simulator, lokalni Supabase in skripte | Aleš, Nejc, Darko ([backend/README.md](backend/README.md)) |
 | `docs/` | dokumentacija in potrjena zasnova | skupno |
+| `.github/workflows/` | CI (GitHub Actions) | skupno |
 
 ## Dokumentacija
 
@@ -38,6 +41,18 @@ Projekt pri predmetu Storitveno usmerjene arhitekture (FERI UM), skupina_10, nov
 | Baza in prijava | PostgreSQL in Auth (Supabase), ena shema na storitev |
 | E-pošta | SMTP (lokalno Mailpit) |
 | Zagon | en zabojnik na storitev, Docker Compose, OpenAPI |
+
+## CI (GitHub Actions)
+
+Potek `CI` ([.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml)) teče ob PR v `main` in ob pushu v `main`. Komponente (`backend/*/pyproject.toml`, `frontend/package.json`) se odkrijejo samodejno; dokler kode ni, opravila uspejo z obvestilom.
+
+| Opravilo | Kaj teče | Artefakti |
+|---|---|---|
+| `lint` | Ruff za zaledne komponente, ESLint za frontend (ko obstaja) | brez |
+| `build` | `python -m build` in `docker build` po komponenti, `npm` build | `backend-dist`, `frontend-dist` |
+| `test` | pytest s pokritostjo po komponenti, `npm test` | `backend-coverage`, `frontend-coverage` |
+
+`lint`, `build` in `test` so obvezna preverjanja za združitev v `main`. Deploy sledi, ko bo aplikacija obstajala (načrtovano).
 
 ## Lokalni zagon (načrtovano)
 

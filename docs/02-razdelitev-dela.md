@@ -42,11 +42,11 @@ Kdo kaj dela in kdaj. Delovanje: [01-arhitektura.md](01-arhitektura.md). Končne
 
 | Tema | Pravilo |
 |---|---|
-| Končano je, ko | pytest (enotski in integracijski testi), izvožen `openapi.yaml` v mapi komponente, zabojnik v Compose, `/health/live` in `/health/ready`, preverjanje klicateljev na vsaki poti, brez skrivnosti v kodi |
+| Končano je, ko | pytest (enotski in integracijski testi), Ruff brez napak, izvožen `openapi.yaml` v mapi komponente, zabojnik v Compose, `/health/live` in `/health/ready`, preverjanje klicateljev na vsaki poti, brez skrivnosti v kodi |
 | Pogodbe | sprememba `openapi.yaml` potrebuje pregled porabnikov |
 | Veje in commiti | veje `<storitev>/<tema>`, Conventional Commits |
 | Pull request | edina pot v `main` (ruleset: brez direktnega pusha in force pusha); pregled drugega člana je priporočen, komentarji morajo biti razrešeni |
-| Potek dela | issue na [GitHub Project](https://github.com/users/mocaales/projects/9) → veja → PR z `Closes #<issue>` → squash merge; stolpci Backlog, Todo, In Progress, In Review, Done |
+| Potek dela | issue na [GitHub Project](https://github.com/users/mocaales/projects/9) → veja → PR z `Closes #<issue>` → squash merge; stolpci To Do, Doing, Done; PR je mogoče združiti le, ko `lint`, `build` in `test` uspejo |
 | Skupno | `docker-compose.yml`, `backend/supabase/`, `backend/bootstrap.sql`, `backend/seed.py`, `backend/export_openapi.py`, `docs/`, `README.md`, `.env.example`, `.gitignore`, `.gitattributes` |
 
 ## Mejniki
