@@ -1,0 +1,52 @@
+# AI
+.claude/
+.codex/
+.agent-memory/
+.cursor/
+.aider*
+.continue/
+.windsurf/
+.github/copilot-instructions.md
+AGENTS.md
+CLAUDE.md
+CLAUDE.local.md
+GEMINI.md
+skills-lock.json
+/scripts/
+/workspace/
+
+# Gradivo
+gradivo/
+
+# Skrivnosti in lokalne nastavitve
+.env
+.env.*
+!.env.example
+backend/simulator/*.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Supabase CLI
+backend/supabase/.branches/
+backend/supabase/.temp/
+
+# Sistem
+.DS_Store
+.idea/
+.vscode/
+*.swp
