@@ -1,0 +1,281 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUFF_VERSION: "0.17.5"
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24"
+
+# A `deploy` job (needs: [lint, build, test]; if push to main; environment: production) can be appended here.
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Discover components
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
+          comps=()
+          for f in backend/*/pyproject.toml; do
+            [ -f "$f" ] && comps+=("$(dirname "$f")")
+          done
+          has_frontend=false
+          [ -f frontend/package.json ] && has_frontend=true
+          {
+            echo "components=${comps[*]:-}"
+            echo "has_python=$([ ${#comps[@]} -gt 0 ] && echo true || echo false)"
+            echo "has_frontend=$has_frontend"
+          } >> "$GITHUB_OUTPUT"
+          if [ ${#comps[@]} -eq 0 ] && [ "$has_frontend" = false ]; then
+            echo "::notice::No backend components (backend/*/pyproject.toml) or frontend (frontend/package.json) found; nothing to lint."
+          fi
+
+      - uses: actions/setup-python@v7
+        if: steps.discover.outputs.has_python == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: actions/setup-node@v7
+        if: steps.discover.outputs.has_frontend == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Ruff
+        if: steps.discover.outputs.has_python == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ steps.discover.outputs.components }}
+        run: |
+          set -euo pipefail
+          python -m pip install "ruff==${RUFF_VERSION}"
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::ruff $c"
+            ruff check "$c" || failed+=("$c (check)")
+            ruff format --check "$c" || failed+=("$c (format)")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Ruff failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      - name: ESLint
+        if: steps.discover.outputs.has_frontend == 'true'
+        shell: bash
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          if ! node -e 'process.exit(require("./package.json").scripts?.lint ? 0 : 1)'; then
+            echo "::error::frontend/package.json has no \"lint\" script; add one (e.g. \"eslint .\")."
+            exit 1
+          fi
+          npm ci
+          npm run lint
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Discover components
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
+          comps=()
+          for f in backend/*/pyproject.toml; do
+            [ -f "$f" ] && comps+=("$(dirname "$f")")
+          done
+          has_frontend=false
+          [ -f frontend/package.json ] && has_frontend=true
+          {
+            echo "components=${comps[*]:-}"
+            echo "has_python=$([ ${#comps[@]} -gt 0 ] && echo true || echo false)"
+            echo "has_frontend=$has_frontend"
+          } >> "$GITHUB_OUTPUT"
+          if [ ${#comps[@]} -eq 0 ] && [ "$has_frontend" = false ]; then
+            echo "::notice::No backend components (backend/*/pyproject.toml) or frontend (frontend/package.json) found; nothing to build."
+          fi
+
+      - uses: actions/setup-python@v7
+        if: steps.discover.outputs.has_python == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/*/pyproject.toml
+
+      - uses: actions/setup-node@v7
+        if: steps.discover.outputs.has_frontend == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        if: steps.discover.outputs.has_frontend == 'true'
+        shell: bash
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+
+      - name: Build backend packages and images
+        if: steps.discover.outputs.has_python == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ steps.discover.outputs.components }}
+        run: |
+          set -euo pipefail
+          python -m pip install build
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::build $c"
+            python -m build "$c" || failed+=("$c (package)")
+            if [ -f "$c/Dockerfile" ]; then
+              docker build --tag "ci-check/$(basename "$c"):${GITHUB_SHA}" "$c" || failed+=("$c (docker)")
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Build failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      - name: Upload frontend dist
+        if: steps.discover.outputs.has_frontend == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          if-no-files-found: error
+
+      - name: Upload backend packages
+        if: steps.discover.outputs.has_python == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-dist
+          path: backend/*/dist
+          if-no-files-found: error
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Discover components
+        id: discover
+        shell: bash
+        run: |
+          set -euo pipefail
+          comps=()
+          for f in backend/*/pyproject.toml; do
+            [ -f "$f" ] && comps+=("$(dirname "$f")")
+          done
+          has_frontend=false
+          [ -f frontend/package.json ] && has_frontend=true
+          {
+            echo "components=${comps[*]:-}"
+            echo "has_python=$([ ${#comps[@]} -gt 0 ] && echo true || echo false)"
+            echo "has_frontend=$has_frontend"
+          } >> "$GITHUB_OUTPUT"
+          if [ ${#comps[@]} -eq 0 ] && [ "$has_frontend" = false ]; then
+            echo "::notice::No backend components (backend/*/pyproject.toml) or frontend (frontend/package.json) found; nothing to test."
+          fi
+
+      - uses: actions/setup-python@v7
+        if: steps.discover.outputs.has_python == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/*/pyproject.toml
+
+      - uses: actions/setup-node@v7
+        if: steps.discover.outputs.has_frontend == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test frontend
+        if: steps.discover.outputs.has_frontend == 'true'
+        shell: bash
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          if ! node -e 'process.exit(require("./package.json").scripts?.test ? 0 : 1)'; then
+            echo "::error::frontend/package.json has no \"test\" script; add one (e.g. \"vitest run --coverage\")."
+            exit 1
+          fi
+          npm ci
+          npm test
+
+      - name: Test backend
+        if: steps.discover.outputs.has_python == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ steps.discover.outputs.components }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            if [ ! -d "$c/tests" ]; then
+              echo "::notice::$c has no tests/ directory; skipping."
+              continue
+            fi
+            echo "::group::pytest $c"
+            (
+              set -euo pipefail
+              python -m venv "$RUNNER_TEMP/venv-$(basename "$c")"
+              . "$RUNNER_TEMP/venv-$(basename "$c")/bin/activate"
+              cd "$c"
+              pip install -e ".[dev]"
+              pip install pytest pytest-cov
+              pytest --cov --cov-report=xml --cov-report=term
+            ) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Tests failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      - name: Upload backend coverage
+        if: always() && steps.discover.outputs.has_python == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-coverage
+          path: backend/*/coverage.xml
+          if-no-files-found: ignore
+
+      - name: Upload frontend coverage
+        if: always() && steps.discover.outputs.has_frontend == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: ignore
