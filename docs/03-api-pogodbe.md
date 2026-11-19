@@ -56,7 +56,7 @@ Telo napake: `message` je kratko angleško besedilo, UI preslika `code` v sloven
 
 ### 3.1 Prodaja (`SaleEvent`, lastnik Sales)
 
-Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprejema. `slotId` vsebuje `slotCode` predala. `paymentMethod`: `CASH`, `CARD`, `OTHER` (samo podatek). `quantity` 1–100.
+Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprejema. `slotId` vsebuje `slotCode` predala. `paymentMethod`: `CASH`, `CARD`, `OTHER` (samo podatek). `quantity` 1–100. `slotId` je `slotCode` predala, 1–8 znakov. `currency` je tri velike črke (ISO 4217). Denar je nenegativen niz z največ 2 decimalkama.
 
 ```json
 {"saleId":"6b1f0c2e-5a34-4d7e-9a10-2f6c1b7d8e01","machineId":"0d9c4a52-3b1e-4f6a-8c27-91e5a7b3d410","slotId":"A1","productId":"c3a8f7d4-12ab-4e55-b6c9-5d0e8a1f2b73","quantity":1,"unitPricePaid":"2.50","currency":"EUR","paymentMethod":"CARD","occurredAt":"2026-11-17T08:30:00Z"}
@@ -172,9 +172,13 @@ Predal je `(machineId, slot)`, kjer je `slot` = `slotCode`. Prazen predal nima i
 | DELETE | `/sales/closings` | OPERATOR | obvezen `date`; izbriše vse `DRAFT` tega dne, potrjene preskoči; ponovitev 200 z `deleted: 0` | 200 `{deleted}`; 422 |
 
 - Statične poti (`stats`, `closings`) so registrirane pred `/sales/{saleId}`.
+- `X-Machine-Id` nastavi gateway iz ključa avtomata; `machineId` v telesu mora ustrezati (sicer 403, glej tabelo).
 - Ob sprejemu Sales preveri izdelek in predal (neznan: 422). Če Product ali Inventory ne odgovori: 503, nič se ne shrani, simulator ponovi z istim `saleId`.
-- Prodaja je nespremenljiva, spreminja se samo stanje uskladitve (`inventory.state`: `PENDING`, `APPLIED`, `NEEDS_RECONCILIATION`, `RESOLVED`). Edini ročni prehod: `NEEDS_RECONCILIATION` → `RESOLVED` (končno).
-- `ReconciliationIn`: `resolution` (`ADJUSTED`: zaloga je bila popravljena v Inventory; `WRITTEN_OFF`: razlika se sprejme brez popravka), `note` (1–500). Sales zaloge ne spreminja. `SaleOut` vsebuje `reconciliation?` (`resolution`, `note`, `resolvedAt`, `resolvedBy`).
+- Prodaja je nespremenljiva, spreminja se samo stanje uskladitve (`inventory.state`: `PENDING`, `APPLIED`, `NEEDS_RECONCILIATION`, `RESOLVED`). Edini ročni prehod: `NEEDS_RECONCILIATION` → `RESOLVED` (končno); iz `PENDING` in `APPLIED` je 409 `INVALID_STATE_TRANSITION`. Filter `reconciliation` sprejme ta štiri stanja.
+- `SaleOut` = polja `SaleEvent` + `receivedAt` (čas sprejema v Sales), `inventory{state, reason?}` (`reason`: `PRODUCT_MISMATCH`, `INSUFFICIENT_STOCK`) in `reconciliation?`.
+- `ReconciliationIn`: `resolution` (`ADJUSTED`: zaloga je bila popravljena v Inventory; `WRITTEN_OFF`: razlika se sprejme brez popravka), `note` (1–500). Sales zaloge ne spreminja. `reconciliation?` vsebuje `resolution`, `note`, `resolvedAt`, `resolvedBy`.
+- Časovni filtri: pri prodajah in statistiki sta `from`/`to` `date-time` (pri prodajah `from` vključen, `to` izključen); pri zaključkih sta `from`/`to` datuma, oba vključena.
+- Statistika avtomata (`GET /sales/stats/{machineId}`) brez prodaj vrne prazen `totals` in `topProducts`, zaključek za tak avtomat ima ničelne zneske; Sales ne kliče Machine.
 - `SalesStatsOut`: `totals[{currency, salesCount, quantity, turnover}]`, `topProducts[{productId, quantity, turnover}]`.
 - Dnevni zaključek: `ClosingIn` (POST): `date` (UTC dan pred današnjim), `machineId?` (brez: vsi avtomati), `note?` (največ 500). `ClosingUpdate` (PUT): `note?`, `status` (`DRAFT` ali `CONFIRMED`). `ClosingOut`: `id`, `date`, `machineId?`, `status`, `note`, `totals[{currency, salesCount, quantity, turnover}]`, `openReconciliations`, `createdAt`, `createdBy`, `updatedAt`, `confirmedAt?`, `confirmedBy?`.
 - En zaključek na par (`date`, `machineId`); vsote so posnetek prodaj z `occurredAt` v tem dnevu. Stanje: `DRAFT` → `CONFIRMED` (končno; potrditev zahteva `openReconciliations` = 0 in še zadnji preračun). Poznejša prodaja potrjenih vsot ne spremeni.
