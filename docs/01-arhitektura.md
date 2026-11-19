@@ -1,6 +1,6 @@
 # Arhitektura (načrtovano)
 
-Kako sistem deluje. Izhodišče: [skupina_10.pdf](skupina_10.pdf). Kdo kaj dela: [02-razdelitev-dela.md](02-razdelitev-dela.md). Končne točke: [03-api-pogodbe.md](03-api-pogodbe.md). Oznake B1, B3–B6 so odprte odločitve ([02](02-razdelitev-dela.md#odprte-odločitve)).
+Kako sistem deluje. Izhodišče: [skupina_10.pdf](skupina_10.pdf). Kdo kaj dela: [02-razdelitev-dela.md](02-razdelitev-dela.md). Končne točke: [03-api-pogodbe.md](03-api-pogodbe.md). Sprejete odločitve: [02](02-razdelitev-dela.md#sprejete-odločitve).
 
 ## 1. Komponente
 
@@ -11,7 +11,7 @@ Kako sistem deluje. Izhodišče: [skupina_10.pdf](skupina_10.pdf). Kdo kaj dela:
       <root>
         <mxCell id="tSrmnOXPhnbIp_Sv3z0b-0" />
         <mxCell id="tSrmnOXPhnbIp_Sv3z0b-1" parent="tSrmnOXPhnbIp_Sv3z0b-0" />
-        <UserObject label="" mermaidData="{&#xa;  &quot;data&quot;: &quot;flowchart LR\n  OP[\&quot;Operater (brskalnik)\&quot;] --&gt; UI[Web UI]\n  KU[\&quot;Kupec (javna stran)\&quot;] --&gt; UI\n  UI --&gt; GW[\&quot;Gateway + Frontend API\&quot;]\n  SIM[Simulator] --&gt; GW\n  GW --&gt; MA[Machine]\n  GW --&gt; MO[Monitoring]\n  GW --&gt; PR[Product]\n  GW --&gt; IN[Inventory]\n  GW --&gt; SA[Sales]\n  MA --&gt; IN\n  MO --&gt; MA\n  MO --&gt; PR\n  PR --&gt; SA\n  SA --&gt; PR\n  SA --&gt; IN\n  IN --&gt; MA\n  IN --&gt; PR\n  IN --&gt; MO\n  MO -. SMTP .-&gt; MAIL[Mailpit]\n  GW --- GWDB[(gateway-db)]\n  MA --- MADB[(machine-db)]\n  MO --- MODB[(monitoring-db)]\n  PR --- PRDB[(product-db)]\n  IN --- INDB[(inventory-db)]\n  SA --- SADB[(sales-db)]\n  classDef ales fill:#E8F1FB,stroke:#3B6EA8\n  classDef nejc fill:#EAF6EA,stroke:#3C8C3C\n  classDef darko fill:#FDF1E3,stroke:#B9772E\n  class MA,MO,SA,SIM ales\n  class PR,IN nejc\n  class GW,UI darko&quot;,&#xa;  &quot;config&quot;: null&#xa;}" id="58CDRFGWXw-fFxP_Z7ij-0">
+        <UserObject label="" mermaidData="{&#xa;  &quot;data&quot;: &quot;flowchart LR\n  OP[\&quot;Operater (brskalnik)\&quot;] --&gt; UI[Web UI]\n  KU[\&quot;Kupec (javna stran)\&quot;] --&gt; UI\n  UI --&gt; GW[\&quot;Gateway + Frontend API\&quot;]\n  SIM[Simulator] --&gt; GW\n  GW --&gt; MA[Machine]\n  GW --&gt; MO[Monitoring]\n  GW --&gt; PR[Product]\n  GW --&gt; IN[Inventory]\n  GW --&gt; SA[Sales]\n  MA --&gt; IN\n  MO --&gt; MA\n  MO --&gt; PR\n  PR --&gt; SA\n  SA --&gt; PR\n  SA --&gt; IN\n  IN --&gt; MA\n  IN --&gt; PR\n  IN --&gt; MO\n  MO -. SMTP .-&gt; MAIL[Mailpit]\n  GW --- GWDB[(gateway-db)]\n  MA --- MADB[(machine-db)]\n  MO --- MODB[(monitoring-db)]\n  PR --- PRDB[(product-db)]\n  IN --- INDB[(inventory-db)]\n  SA --- SADB[(sales-db)]\n  classDef ales fill:#E8F1FB,stroke:#3B6EA8\n  classDef nejc fill:#EAF6EA,stroke:#3C8C3C\n  classDef darko fill:#FDF1E3,stroke:#B9772E\n  class MA,MO,SA ales\n  class PR,IN,SIM nejc\n  class GW,UI darko&quot;,&#xa;  &quot;config&quot;: null&#xa;}" id="58CDRFGWXw-fFxP_Z7ij-0">
           <mxCell connectable="0" parent="tSrmnOXPhnbIp_Sv3z0b-1" style="group;transparentBounds=1;editIcon=1;lockedGroup=0;groupPadding=10;" vertex="1">
             <mxGeometry as="geometry" />
           </mxCell>
@@ -36,8 +36,8 @@ Kako sistem deluje. Izhodišče: [skupina_10.pdf](skupina_10.pdf). Kdo kaj dela:
             <mxGeometry height="54" width="232" x="444" y="363" as="geometry" />
           </mxCell>
         </UserObject>
-        <UserObject label="Simulator" mermaidId="n:SIM" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=#E8F1FB;strokeColor=#3B6EA8;fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Simulator" id="tSrmnOXPhnbIp_Sv3z0b-6">
-          <mxCell parent="58CDRFGWXw-fFxP_Z7ij-0" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=#E8F1FB;strokeColor=#3B6EA8;fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
+        <UserObject label="Simulator" mermaidId="n:SIM" mermaidBaseStyle="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=#EAF6EA;strokeColor=#3C8C3C;fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" mermaidBaseValue="Simulator" id="tSrmnOXPhnbIp_Sv3z0b-6">
+          <mxCell parent="58CDRFGWXw-fFxP_Z7ij-0" style="html=1;whiteSpace=wrap;strokeWidth=1;fillColor=#EAF6EA;strokeColor=#3C8C3C;fontColor=light-dark(#333333,#cccccc);fontFamily=Trebuchet MS,Verdana,Arial,sans-serif;fontSize=16;" vertex="1">
             <mxGeometry height="54" width="129" x="265" y="311" as="geometry" />
           </mxCell>
         </UserObject>
@@ -374,7 +374,7 @@ Pet storitev in gateway ima vsak svojo bazo PostgreSQL v svojem zabojniku in svo
 | Inventory | Nejc | FastAPI | količina in serija v predalu, polnitve, praznjenje in odpis potekle zaloge, premiki |
 | Gateway + Frontend API | Darko | Express | prijava in računi operaterjev, preverjanje identitete, usmerjanje, sestavljeni pogledi |
 | Web UI | Darko | React | javni zemljevid, operaterska plošča |
-| Simulator | Aleš (B1) | Python | emulira avtomate: meritve in prodaje |
+| Simulator | Nejc | Python | emulira avtomate: meritve in prodaje |
 
 ## 2. Načela
 
@@ -403,7 +403,7 @@ Pet storitev in gateway ima vsak svojo bazo PostgreSQL v svojem zabojniku in svo
 | Inventory (outbox) | Monitoring (Aleš) | alarm `LOW_STOCK` | ostane v outboxu, ponavlja |
 | Sales (Aleš) | Product, Inventory (Nejc) | ob sprejemu prodaje preveri izdelek in predal | 503, nič se ne shrani, simulator ponovi |
 | Sales (outbox) | Inventory (Nejc) | enkratno zmanjšanje zaloge po `saleId` | `PENDING`, ponavlja |
-| Simulator (Aleš) | Gateway (Darko) | meritve in prodaje | dogodek hrani in ponavlja |
+| Simulator (Nejc) | Gateway (Darko) | meritve in prodaje | dogodek hrani in ponavlja |
 
 Vsaka komponenta kliče vsaj eno komponento drugega člana: Machine, Monitoring in Sales kličejo Nejčeve storitve, Product in Inventory Aleševe, gateway pa vse.
 
@@ -599,7 +599,7 @@ Frontend API kliče storitve vzporedno; vsak odsek pogleda ima `status` (`OK`, `
 
 ### 5.4 Javni zemljevid
 
-`GET /api/v1/public/machines` in `.../{id}/availability` delujeta brez prijave. Umaknjeni avtomati so skriti, avtomat v servisu je prikazan kot nerazpoložljiv, potekla zaloga in prazni predali so izpuščeni (datum: B4). Javni odgovori ne vsebujejo prodaj, alarmov, količin, kod serij ali ključev.
+`GET /api/v1/public/machines` in `.../{id}/availability` delujeta brez prijave. Umaknjeni avtomati so skriti, avtomat v servisu je prikazan kot nerazpoložljiv, potekla zaloga in prazni predali so izpuščeni (pravilo: [§6.4](#64-predal-in-polnitev)). Javni odgovori ne vsebujejo prodaj, alarmov, količin, kod serij ali ključev.
 
 ## 6. Stanja in pravila
 
@@ -627,6 +627,7 @@ Dnevni zaključek je posnetek prodaj enega dne (UTC) za en avtomat ali vse. `DRA
 ### 6.4 Predal in polnitev
 
 - En predal ima en izdelek in eno serijo.
+- Zaloga je potekla, ko je lokalni datum v Europe/Ljubljana po `expiryDate`; izdelek velja do konca dneva poteka. Pravilo velja za javno razpoložljivost in za `DELETE /inventory/expired`.
 - Menjava izdelka pri količini večji od 0: 409 `SLOT_NOT_EMPTY`. Praznjenje predala in odpis potekle zaloge zapišeta premik `REMOVAL`.
 - Polnitev z istim `refillId` ne podvoji količine; druga serija v nepraznem predalu: 409 `SLOT_HAS_OTHER_BATCH`.
 - `decrease` kliče samo Sales, enkrat po `saleId`.
@@ -634,7 +635,7 @@ Dnevni zaključek je posnetek prodaj enega dne (UTC) za en avtomat ali vse. `DRA
 
 ### 6.5 Izdelek in kategorija
 
-Izdelek se arhivira samo brez odprte uskladitve prodaje (409 `PRODUCT_HAS_OPEN_RECONCILIATION`). Kategorija se izbriše samo, če je ne uporablja noben izdelek, tudi arhiviran (409 `CATEGORY_IN_USE`).
+Izdelek se sme arhivirati tudi, ko je na zalogi; zaloga v predalih se proda do praznjenja predala. Nastavitev predala z arhiviranim izdelkom in polnitev z njim zavrne 409 `PRODUCT_ARCHIVED`. Arhiviranje je zavrnjeno, če ima prodaja tega izdelka odprto uskladitev (409 `PRODUCT_HAS_OPEN_RECONCILIATION`). Web UI pred arhiviranjem prikaže število predalov z izdelkom. Kategorija se izbriše samo, če je ne uporablja noben izdelek, tudi arhiviran (409 `CATEGORY_IN_USE`).
 
 ### 6.6 Operaterski račun
 
@@ -738,7 +739,7 @@ Testi baze tečejo na Postgresu v Testcontainers. Zagon celote: §10.
 | `BOOTSTRAP_OPERATOR_EMAIL`, `BOOTSTRAP_OPERATOR_PASSWORD` | gateway, `backend/seed.py` | prvi operater |
 | `CORS_ORIGINS` | gateway | izvor Web UI (`http://localhost:5173`) |
 | `GATEWAY_SERVICE_TOKEN`, `MACHINE_SERVICE_TOKEN`, `MONITORING_SERVICE_TOKEN`, `PRODUCT_SERVICE_TOKEN`, `INVENTORY_SERVICE_TOKEN`, `SALES_SERVICE_TOKEN` | klicatelj in klicane storitve | notranji žetoni |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `ALERT_EMAIL_TO` | monitoring | e-pošta alarmov |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `ALERT_EMAIL_TO` | monitoring | e-pošta alarmov; `ALERT_EMAIL_TO` je en ali več naslovov, ločenih z vejico |
 | `VITE_API_URL` | frontend ob gradnji | naslov gatewaya (`http://localhost:8080`) |
 
 Compose iz teh vrednosti sestavi povezavo do baze: Python (product-, inventory-service) `DATABASE_URL=postgresql+psycopg://product:<geslo>@product-db:5432/product`, Node `DATABASE_URL=postgres://gateway:<geslo>@gateway-db:5432/gateway`, Java (machine-, monitoring-, sales-service) `SPRING_DATASOURCE_URL=jdbc:postgresql://machine-db:5432/machine` s `SPRING_DATASOURCE_USERNAME` in `SPRING_DATASOURCE_PASSWORD`. Naslovi storitev (`MACHINE_URL`, `MONITORING_URL`, `PRODUCT_URL`, `INVENTORY_URL`, `SALES_URL`, za simulator `GATEWAY_URL`) so v `docker-compose.yml`, ne v `.env`.

@@ -1,6 +1,6 @@
 # API pogodbe (načrtovano)
 
-Referenca končnih točk. Izhodišče za obseg: [skupina_10.pdf](skupina_10.pdf), ki je starejši od posodobitve zahtev; pri razlikah velja ta dokument. Delovanje: [01-arhitektura.md](01-arhitektura.md). Lastniki: [02-razdelitev-dela.md](02-razdelitev-dela.md). Točke z oznako "predlog" ali B1, B3–B6 še potrdi ekipa.
+Referenca končnih točk. Izhodišče za obseg: [skupina_10.pdf](skupina_10.pdf), ki je starejši od posodobitve zahtev; pri razlikah velja ta dokument. Delovanje: [01-arhitektura.md](01-arhitektura.md). Lastniki: [02-razdelitev-dela.md](02-razdelitev-dela.md). Sprejete odločitve: [02](02-razdelitev-dela.md#sprejete-odločitve).
 
 ## 1. Konvencije
 
@@ -9,7 +9,7 @@ Referenca končnih točk. Izhodišče za obseg: [skupina_10.pdf](skupina_10.pdf)
 | Poti | storitve `/v1/...`; gateway `/api/v1/...` (pot storitve z dodano predpono `/api`). Tabele spodaj navajajo pot storitve; drugačna pot gatewaya je v opombi. |
 | Kdo kliče | `OPERATOR` (JWT gatewaya), `MACHINE` (`X-Machine-Key`), `PUBLIC` (brez prijave), ali ime storitve (`X-Service-Token`); `frontend-api` je modul gatewaya in uporablja `GATEWAY_SERVICE_TOKEN` |
 | Glave | `X-Trace-Id` povsod; `Authorization: Bearer <accessToken>` za `OPERATOR`; gateway doda `X-Operator-Id` ali `X-Machine-Id` in odstrani enake glave odjemalca |
-| Tipi | ID-ji so UUID, `slotCode` je niz (npr. `"A1"`); denar in temperature decimalni niz (`"2.50"`); časi ISO-8601 UTC s `Z`; datumi `YYYY-MM-DD` (UTC, razen `expiryDate`: B4); enumi `UPPER_SNAKE` |
+| Tipi | ID-ji so UUID, `slotCode` je niz (npr. `"A1"`); denar in temperature decimalni niz (`"2.50"`); časi ISO-8601 UTC s `Z`; datumi `YYYY-MM-DD` (UTC; `expiryDate` je lokalni datum Europe/Ljubljana, [01 §6.4](01-arhitektura.md#64-predal-in-polnitev)); enumi `UPPER_SNAKE` |
 | Zahteve | neznana polja: 422; omejitve polj so navedene samo pri modelu |
 | Seznami | `limit` (privzeto 50, največ 200), `offset`; odgovor `{items, total, limit, offset}` |
 | Ponovni poskusi | samo GET in idempotentni klici |
@@ -110,6 +110,7 @@ Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprej
 - Poročilo `POST /alerts`: `machineId`, `type: LOW_STOCK`, `version` (naraščajoče po avtomatu), `slots[{slotCode, productId, quantity, lowStockThreshold}]`. Prazen `slots` razreši alarm. `LOW_STOCK` razrešuje samo Inventory.
 - `ResolveIn`: `note?` (največ 500). Potrditev nima telesa; `acknowledgedBy` je `X-Operator-Id`.
 - Alarm: `status` (`ACTIVE`, `RESOLVED`) in potrditev (`acknowledgedAt`, `acknowledgedBy`) sta ločena. Razrešitev: `resolvedAt`, `resolvedBy?`, `resolution` (`AUTO`, `MANUAL`), `resolutionNote?`. Če pogoj po ročni razrešitvi še traja, ga naslednja ocena odpre kot nov alarm. `notification` (`PENDING`, `SENT`, `FAILED`, `attempts`) kaže stanje e-pošte; napaka e-pošte alarma ne spremeni. Pravila odpiranja: [01 §6.2](01-arhitektura.md#62-alarmi).
+- E-pošto alarmov pošlje Monitoring na naslove iz `ALERT_EMAIL_TO` (en ali več, ločenih z vejico; [01 §10](01-arhitektura.md#10-zagon-v-dockerju)).
 - E-pošta `LOW_STOCK` vsebuje nazive izdelkov iz `GET /v1/products/{id}`; če Product ne odgovori, vsebuje `productId` in se ne zadrži.
 
 ## 6. Product (Nejc)
@@ -118,9 +119,9 @@ Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprej
 |---|---|---|---|---|
 | GET | `/products` | OPERATOR, frontend-api, inventory, sales | filtri `q`, `categoryId`, `status` (privzeto `ACTIVE`) | 200 |
 | GET | `/products/{id}` | kot zgoraj in monitoring | vrne tudi arhivirane | 200; 404 `PRODUCT_NOT_FOUND` |
-| POST | `/products` | OPERATOR | ni idempotenten; `sku`: B3 | 201; 422 `REFERENCE_NOT_FOUND` (kategorija) |
+| POST | `/products` | OPERATOR | ni idempotenten; brez `sku` (nazivi se lahko ponavljajo) | 201; 422 `REFERENCE_NOT_FOUND` (kategorija) |
 | PUT | `/products/{id}` | OPERATOR | idempotentna zamenjava; cena ne spremeni zabeleženih prodaj | 200; 404, 409 `PRODUCT_ARCHIVED`, 422 `REFERENCE_NOT_FOUND` |
-| DELETE | `/products/{id}` | OPERATOR | arhivacija; prej `GET /v1/sales?productId=&reconciliation=NEEDS_RECONCILIATION&limit=1`; ponovitev 204 brez preverjanja; B6 | 204; 404, 409 `PRODUCT_HAS_OPEN_RECONCILIATION`, 503 |
+| DELETE | `/products/{id}` | OPERATOR | arhivacija; prej `GET /v1/sales?productId=&reconciliation=NEEDS_RECONCILIATION&limit=1`; ponovitev 204 brez preverjanja; sme arhivirati izdelek na zalogi ([01 §6.5](01-arhitektura.md#65-izdelek-in-kategorija)) | 204; 404, 409 `PRODUCT_HAS_OPEN_RECONCILIATION`, 503 |
 | GET | `/categories` | OPERATOR, frontend-api | filter `q`; razvrščeno po imenu | 200 |
 | GET | `/categories/{id}` | kot zgoraj | | 200; 404 `CATEGORY_NOT_FOUND` |
 | POST | `/categories` | OPERATOR | ni idempotenten | 201; 409 `CATEGORY_NAME_TAKEN` |
@@ -139,12 +140,12 @@ Predal je `(machineId, slot)`, kjer je `slot` = `slotCode`. Prazen predal nima i
 | GET | `/inventory/{machineId}` | OPERATOR, frontend-api, machine | zaloga po predalih; za klicatelja `machine` brez klica v Machine, neznan avtomat vrne prazen seznam | 200; 404 |
 | GET | `/inventory/product/{productId}` | OPERATOR, frontend-api | avtomati z izdelkom | 200 |
 | GET | `/inventory/{machineId}/{slot}` | OPERATOR, frontend-api, sales | | 200; 404 `SLOT_NOT_FOUND` |
-| PUT | `/inventory/{machineId}/{slot}` | OPERATOR | idempotentno; količina vsaj 1; praznjenje je `DELETE` | 200; 404, 409 `SLOT_NOT_EMPTY`, 422 `REFERENCE_NOT_FOUND` |
+| PUT | `/inventory/{machineId}/{slot}` | OPERATOR | idempotentno; količina vsaj 1; praznjenje je `DELETE` | 200; 404, 409 `SLOT_NOT_EMPTY`, `PRODUCT_ARCHIVED`, 422 `REFERENCE_NOT_FOUND` |
 | PUT | `/inventory/{machineId}/{slot}/threshold` | OPERATOR | idempotentna zamenjava praga; nova ocena nizke zaloge | 200; 404 `SLOT_NOT_FOUND` |
 | DELETE | `/inventory/{machineId}/{slot}` | OPERATOR | izprazni predal, zapiše `REMOVAL` z odstranjeno količino; že prazen: 204 brez premika | 204; 404 `SLOT_NOT_FOUND` |
-| DELETE | `/inventory/expired` | OPERATOR | obvezen `machineId`; izprazni predale s pretečenim `expiryDate` (B4), po en `REMOVAL`; ponovitev 200 s praznim seznamom | 200; 404 `MACHINE_NOT_FOUND` |
+| DELETE | `/inventory/expired` | OPERATOR | obvezen `machineId`; izprazni predale, katerih zaloga je potekla (pravilo: [01 §6.4](01-arhitektura.md#64-predal-in-polnitev)), po en `REMOVAL`; ponovitev 200 s praznim seznamom | 200; 404 `MACHINE_NOT_FOUND` |
 | POST | `/inventory/{machineId}/{slot}/decrease` | sales; samo interno | idempotentno po `saleId`: isto telo 200 s shranjenim rezultatom | 201 / 200; 403, 404, 409 `SALE_ID_CONFLICT` |
-| POST | `/inventory/refill` | OPERATOR | idempotentno po `refillId`: količina se ne podvoji | 201 / 200; 404, 409 `REFILL_ID_CONFLICT`, `SLOT_HAS_OTHER_BATCH`, 422 |
+| POST | `/inventory/refill` | OPERATOR | idempotentno po `refillId`: količina se ne podvoji | 201 / 200; 404, 409 `REFILL_ID_CONFLICT`, `SLOT_HAS_OTHER_BATCH`, `PRODUCT_ARCHIVED`, 422 |
 | GET | `/inventory/movements` | OPERATOR | filtri `machineId`, `productId`, `type`, `from`, `to` | 200 |
 
 - `SlotSet`: `productId`, `batchCode`, `expiryDate`, `quantity` (1–1000), `lowStockThreshold`. `ThresholdIn`: `lowStockThreshold` (0–1000); odgovor je predal. `RefillIn`: `refillId`, `machineId`, `slot`, `productId`, `batchCode`, `expiryDate`, `quantity`. `DecreaseIn`: `saleId`, `productId`, `quantity`. `ExpiredOut`: `removed[{slot, productId, batchCode, quantity}]`.
