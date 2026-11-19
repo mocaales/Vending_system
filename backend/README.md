@@ -15,3 +15,16 @@
 | `smoke_test.py` | preverjanje glavnega toka od prijave do alarma | Python | Nejc Cekuta (opravilo `smoke` v CI: Darko Sever) |
 
 Struktura komponent: [docs/01 §9](../docs/01-arhitektura.md#9-struktura-komponent). Zagon: [docs/01 §10](../docs/01-arhitektura.md#10-zagon-v-dockerju). Končne točke: [docs/03](../docs/03-api-pogodbe.md).
+
+## Lokalni zagon
+
+Iz korena repozitorija:
+
+```bash
+cp .env.example .env            # .env ni v gitu
+openssl rand -hex 32            # za vsako prazno skrivnost v .env (gesla baz, JWT_SECRET, žetoni)
+docker compose up -d --wait     # šest baz, Mailpit in komponente, ki so že na main
+docker compose down -v          # ustavi in izbriše tudi podatke baz
+```
+
+Mailpit (prejete e-pošte alarmov): http://localhost:8025. Baze in storitve od zunaj niso dosegljive.

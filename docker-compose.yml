@@ -1,0 +1,153 @@
+# Lokalni zagon: šest baz PostgreSQL (po ena na komponento) in Mailpit.
+# Zabojnike komponent doda vsak ogrodni issue sam, v svojem PR (glej vzorec spodaj).
+# Na računalniku sta objavljena samo gateway (8080, doda ga njegov issue) in Mailpit (8025);
+# frontend (5173) doda svoj issue. Baze in storitve od zunaj niso dosegljive.
+# Gesla pridejo iz .env (kopija .env.example); brez njih Compose ne zažene.
+name: vending
+
+services:
+  machine-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: machine
+      POSTGRES_USER: machine
+      POSTGRES_PASSWORD: ${MACHINE_DB_PASSWORD:?Nastavi MACHINE_DB_PASSWORD v .env}
+    volumes:
+      - machine-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U machine -d machine"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+  monitoring-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: monitoring
+      POSTGRES_USER: monitoring
+      POSTGRES_PASSWORD: ${MONITORING_DB_PASSWORD:?Nastavi MONITORING_DB_PASSWORD v .env}
+    volumes:
+      - monitoring-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitoring -d monitoring"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+  product-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: product
+      POSTGRES_USER: product
+      POSTGRES_PASSWORD: ${PRODUCT_DB_PASSWORD:?Nastavi PRODUCT_DB_PASSWORD v .env}
+    volumes:
+      - product-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product -d product"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+  inventory-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: ${INVENTORY_DB_PASSWORD:?Nastavi INVENTORY_DB_PASSWORD v .env}
+    volumes:
+      - inventory-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory -d inventory"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+  sales-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: sales
+      POSTGRES_USER: sales
+      POSTGRES_PASSWORD: ${SALES_DB_PASSWORD:?Nastavi SALES_DB_PASSWORD v .env}
+    volumes:
+      - sales-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sales -d sales"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+  gateway-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${GATEWAY_DB_PASSWORD:?Nastavi GATEWAY_DB_PASSWORD v .env}
+    volumes:
+      - gateway-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d gateway"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+    restart: unless-stopped
+
+  # Spletni vmesnik je na http://localhost:8025; SMTP (1025) je dosegljiv samo znotraj omrežja Compose.
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    ports:
+      - "127.0.0.1:8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # VZOREC (komentiran): blok komponente. Vsaka komponenta ga prekopira v svojem PR.
+  # Pravila:
+  #  - med storitvami ni `depends_on`; komponenta počaka samo na zdravo LASTNO bazo;
+  #  - komponenta dobi samo svoje spremenljivke (brez `env_file` celotnega .env);
+  #  - omejitev pomnilnika: Python in Node 256m, Java 512m;
+  #  - `restart: unless-stopped`;
+  #  - preverjanje zdravja na /health/ready, komponenta posluša na vratih 8000 (samo znotraj omrežja);
+  #  - gateway (8080) in frontend (5173) objavita vrata v svojih issueh.
+  #
+  # sales-service:
+  #   build: ./backend/sales-service
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://sales-db:5432/sales
+  #     SPRING_DATASOURCE_USERNAME: sales
+  #     SPRING_DATASOURCE_PASSWORD: ${SALES_DB_PASSWORD:?Nastavi SALES_DB_PASSWORD v .env}
+  #     SALES_SERVICE_TOKEN: ${SALES_SERVICE_TOKEN:?Nastavi SALES_SERVICE_TOKEN v .env}
+  #   depends_on:
+  #     sales-db:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/ready"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 10
+  #   mem_limit: 512m
+  #   restart: unless-stopped
+  # ---------------------------------------------------------------------------
+
+volumes:
+  machine-db-data:
+  monitoring-db-data:
+  product-db-data:
+  inventory-db-data:
+  sales-db-data:
+  gateway-db-data:
