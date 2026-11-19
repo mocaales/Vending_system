@@ -30,7 +30,7 @@ Projekt pri predmetu Storitveno usmerjene arhitekture (FERI UM), skupina_10, nov
 | [docs/01-arhitektura.md](docs/01-arhitektura.md) | kako sistem deluje: komponente, tokovi, stanja, varnost, zagon v Dockerju |
 | [docs/02-razdelitev-dela.md](docs/02-razdelitev-dela.md) | kdo kaj dela, mejniki, demonstracija, odprte odločitve |
 | [docs/03-api-pogodbe.md](docs/03-api-pogodbe.md) | API: konvencije, dogodka, končne točke, kode napak |
-| [docs/skupina_10.pdf](docs/skupina_10.pdf) | potrjena idejna zasnova (izhodišče obsega) |
+| [docs/skupina_10.pdf](docs/skupina_10.pdf) | potrjena idejna zasnova (izhodišče obsega); nastala pred posodobitvijo zahtev predmeta, zato pri razlikah velja `docs/01`–`03` (tehnologije, baze, prijava, končne točke) |
 
 ## Tehnologije (načrtovano)
 

@@ -1,6 +1,6 @@
 # API pogodbe (načrtovano)
 
-Referenca končnih točk. Osnova: `skupina_10.pdf` ([skupina_10.pdf](skupina_10.pdf)). Delovanje: [01-arhitektura.md](01-arhitektura.md). Lastniki: [02-razdelitev-dela.md](02-razdelitev-dela.md). Točke z oznako "predlog" ali B1, B3–B6 še potrdi ekipa.
+Referenca končnih točk. Izhodišče za obseg: [skupina_10.pdf](skupina_10.pdf), ki je starejši od posodobitve zahtev; pri razlikah velja ta dokument. Delovanje: [01-arhitektura.md](01-arhitektura.md). Lastniki: [02-razdelitev-dela.md](02-razdelitev-dela.md). Točke z oznako "predlog" ali B1, B3–B6 še potrdi ekipa.
 
 ## 1. Konvencije
 
