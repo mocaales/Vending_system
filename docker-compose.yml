@@ -115,6 +115,28 @@ services:
     mem_limit: 128m
     restart: unless-stopped
 
+  # Machine Service (Java). Kličejo ga gateway, inventory in monitoring; zunaj omrežja Compose ni dosegljiv.
+  machine-service:
+    build: ./backend/machine-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://machine-db:5432/machine
+      SPRING_DATASOURCE_USERNAME: machine
+      SPRING_DATASOURCE_PASSWORD: ${MACHINE_DB_PASSWORD:?Nastavi MACHINE_DB_PASSWORD v .env}
+      GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN:?Nastavi GATEWAY_SERVICE_TOKEN v .env}
+      INVENTORY_SERVICE_TOKEN: ${INVENTORY_SERVICE_TOKEN:?Nastavi INVENTORY_SERVICE_TOKEN v .env}
+      MONITORING_SERVICE_TOKEN: ${MONITORING_SERVICE_TOKEN:?Nastavi MONITORING_SERVICE_TOKEN v .env}
+    depends_on:
+      machine-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m
+    restart: unless-stopped
+
   # ---------------------------------------------------------------------------
   # VZOREC (komentiran): blok komponente. Vsaka komponenta ga prekopira v svojem PR.
   # Pravila:
