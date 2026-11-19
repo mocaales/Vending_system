@@ -16,54 +16,83 @@ concurrency:
 env:
   RUFF_VERSION: "0.17.5"
   PYTHON_VERSION: "3.12"
-  NODE_VERSION: "24"
+  NODE_VERSION: "24" # frontend and Node backends (one version in the repo)
+  JAVA_VERSION: "21"
 
+# Components are discovered by marker file:
+#   backend/*/pyproject.toml -> Python (FastAPI)
+#   backend/*/pom.xml        -> Java (Spring Boot, Maven)
+#   backend/*/package.json   -> Node (Express, TypeScript)
+#   backend/*/Dockerfile     -> container image (any stack)
+#   frontend/package.json    -> React frontend
 # A `deploy` job (needs: [lint, build, test]; if push to main; environment: production) can be appended here.
 jobs:
-  lint:
-    name: lint
+  discover:
+    name: discover
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    outputs:
+      python: ${{ steps.find.outputs.python }}
+      java: ${{ steps.find.outputs.java }}
+      node: ${{ steps.find.outputs.node }}
+      docker: ${{ steps.find.outputs.docker }}
+      has_python: ${{ steps.find.outputs.has_python }}
+      has_java: ${{ steps.find.outputs.has_java }}
+      has_node: ${{ steps.find.outputs.has_node }}
+      has_docker: ${{ steps.find.outputs.has_docker }}
+      has_frontend: ${{ steps.find.outputs.has_frontend }}
     steps:
       - uses: actions/checkout@v7
 
       - name: Discover components
-        id: discover
+        id: find
         shell: bash
         run: |
           set -euo pipefail
-          comps=()
-          for f in backend/*/pyproject.toml; do
-            [ -f "$f" ] && comps+=("$(dirname "$f")")
-          done
+          shopt -s nullglob
+          py=(); jv=(); nd=(); dk=()
+          for f in backend/*/pyproject.toml; do py+=("$(dirname "$f")"); done
+          for f in backend/*/pom.xml; do jv+=("$(dirname "$f")"); done
+          for f in backend/*/package.json; do nd+=("$(dirname "$f")"); done
+          for f in backend/*/Dockerfile; do dk+=("$(dirname "$f")"); done
+          has() { [ "$1" -gt 0 ] && echo true || echo false; }
           has_frontend=false
           [ -f frontend/package.json ] && has_frontend=true
           {
-            echo "components=${comps[*]:-}"
-            echo "has_python=$([ ${#comps[@]} -gt 0 ] && echo true || echo false)"
+            echo "python=${py[*]-}"
+            echo "java=${jv[*]-}"
+            echo "node=${nd[*]-}"
+            echo "docker=${dk[*]-}"
+            echo "has_python=$(has "${#py[@]}")"
+            echo "has_java=$(has "${#jv[@]}")"
+            echo "has_node=$(has "${#nd[@]}")"
+            echo "has_docker=$(has "${#dk[@]}")"
             echo "has_frontend=$has_frontend"
           } >> "$GITHUB_OUTPUT"
-          if [ ${#comps[@]} -eq 0 ] && [ "$has_frontend" = false ]; then
-            echo "::notice::No backend components (backend/*/pyproject.toml) or frontend (frontend/package.json) found; nothing to lint."
+          echo "python: ${py[*]-} | java: ${jv[*]-} | node: ${nd[*]-} | docker: ${dk[*]-} | frontend: $has_frontend"
+          if [ $(( ${#py[@]} + ${#jv[@]} + ${#nd[@]} )) -eq 0 ] && [ "$has_frontend" = false ]; then
+            echo "::notice::No components found (backend/*/{pyproject.toml,pom.xml,package.json}, frontend/package.json); nothing to do."
           fi
 
+  lint:
+    name: lint
+    needs: discover
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # Python
       - uses: actions/setup-python@v7
-        if: steps.discover.outputs.has_python == 'true'
+        if: needs.discover.outputs.has_python == 'true'
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - uses: actions/setup-node@v7
-        if: steps.discover.outputs.has_frontend == 'true'
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Ruff
-        if: steps.discover.outputs.has_python == 'true'
+        if: needs.discover.outputs.has_python == 'true'
         shell: bash
         env:
-          COMPONENTS: ${{ steps.discover.outputs.components }}
+          COMPONENTS: ${{ needs.discover.outputs.python }}
         run: |
           set -euo pipefail
           python -m pip install "ruff==${RUFF_VERSION}"
@@ -79,8 +108,43 @@ jobs:
             exit 1
           fi
 
-      - name: ESLint
-        if: steps.discover.outputs.has_frontend == 'true'
+      # Java: lint (Spotless/Checkstyle) is bound to the Maven `validate` phase in each pom.
+      - uses: actions/setup-java@v5
+        if: needs.discover.outputs.has_java == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Maven validate (lint)
+        if: needs.discover.outputs.has_java == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.java }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::mvn validate $c"
+            mvn_bin=mvn; [ -x "$c/mvnw" ] && mvn_bin=./mvnw
+            (cd "$c" && "$mvn_bin" -B -ntp validate) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Maven lint failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      # Frontend
+      - uses: actions/setup-node@v7
+        if: needs.discover.outputs.has_frontend == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: ESLint (frontend)
+        if: needs.discover.outputs.has_frontend == 'true'
         shell: bash
         working-directory: frontend
         run: |
@@ -92,49 +156,57 @@ jobs:
           npm ci
           npm run lint
 
+      # Node backend
+      - uses: actions/setup-node@v7
+        if: needs.discover.outputs.has_node == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/*/package-lock.json
+
+      - name: ESLint (node backends)
+        if: needs.discover.outputs.has_node == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.node }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::npm lint $c"
+            (
+              set -euo pipefail
+              cd "$c"
+              node -e 'process.exit(require("./package.json").scripts?.lint ? 0 : 1)' \
+                || { echo "::error::$c/package.json has no \"lint\" script"; exit 1; }
+              npm ci
+              npm run lint
+            ) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Node lint failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
   build:
     name: build
+    needs: discover
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
-      - name: Discover components
-        id: discover
-        shell: bash
-        run: |
-          set -euo pipefail
-          comps=()
-          for f in backend/*/pyproject.toml; do
-            [ -f "$f" ] && comps+=("$(dirname "$f")")
-          done
-          has_frontend=false
-          [ -f frontend/package.json ] && has_frontend=true
-          {
-            echo "components=${comps[*]:-}"
-            echo "has_python=$([ ${#comps[@]} -gt 0 ] && echo true || echo false)"
-            echo "has_frontend=$has_frontend"
-          } >> "$GITHUB_OUTPUT"
-          if [ ${#comps[@]} -eq 0 ] && [ "$has_frontend" = false ]; then
-            echo "::notice::No backend components (backend/*/pyproject.toml) or frontend (frontend/package.json) found; nothing to build."
-          fi
-
-      - uses: actions/setup-python@v7
-        if: steps.discover.outputs.has_python == 'true'
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: backend/*/pyproject.toml
-
+      # Frontend
       - uses: actions/setup-node@v7
-        if: steps.discover.outputs.has_frontend == 'true'
+        if: needs.discover.outputs.has_frontend == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
-        if: steps.discover.outputs.has_frontend == 'true'
+        if: needs.discover.outputs.has_frontend == 'true'
         shell: bash
         working-directory: frontend
         run: |
@@ -142,87 +214,162 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build backend packages and images
-        if: steps.discover.outputs.has_python == 'true'
+      # Python
+      - uses: actions/setup-python@v7
+        if: needs.discover.outputs.has_python == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/*/pyproject.toml
+
+      - name: Build Python packages
+        if: needs.discover.outputs.has_python == 'true'
         shell: bash
         env:
-          COMPONENTS: ${{ steps.discover.outputs.components }}
+          COMPONENTS: ${{ needs.discover.outputs.python }}
         run: |
           set -euo pipefail
           python -m pip install build
           failed=()
           for c in $COMPONENTS; do
-            echo "::group::build $c"
-            python -m build "$c" || failed+=("$c (package)")
-            if [ -f "$c/Dockerfile" ]; then
-              docker build --tag "ci-check/$(basename "$c"):${GITHUB_SHA}" "$c" || failed+=("$c (docker)")
-            fi
+            echo "::group::python -m build $c"
+            python -m build "$c" || failed+=("$c")
             echo "::endgroup::"
           done
           if [ ${#failed[@]} -gt 0 ]; then
-            printf '::error::Build failed: %s\n' "${failed[@]}"
+            printf '::error::Python build failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      # Java
+      - uses: actions/setup-java@v5
+        if: needs.discover.outputs.has_java == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Build Java packages
+        if: needs.discover.outputs.has_java == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.java }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::mvn package $c"
+            mvn_bin=mvn; [ -x "$c/mvnw" ] && mvn_bin=./mvnw
+            (cd "$c" && "$mvn_bin" -B -ntp -DskipTests package) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Maven build failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      # Node backend
+      - uses: actions/setup-node@v7
+        if: needs.discover.outputs.has_node == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/*/package-lock.json
+
+      - name: Build Node backends
+        if: needs.discover.outputs.has_node == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.node }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::npm build $c"
+            (
+              set -euo pipefail
+              cd "$c"
+              node -e 'process.exit(require("./package.json").scripts?.build ? 0 : 1)' \
+                || { echo "::error::$c/package.json has no \"build\" script"; exit 1; }
+              npm ci
+              npm run build
+            ) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Node build failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      # Container images: every backend component with a Dockerfile, any stack
+      - name: Build Docker images
+        if: needs.discover.outputs.has_docker == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.docker }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::docker build $c"
+            docker build --tag "ci-check/$(basename "$c"):${GITHUB_SHA}" "$c" || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Docker build failed: %s\n' "${failed[@]}"
             exit 1
           fi
 
       - name: Upload frontend dist
-        if: steps.discover.outputs.has_frontend == 'true'
+        if: needs.discover.outputs.has_frontend == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: frontend/dist
           if-no-files-found: error
 
-      - name: Upload backend packages
-        if: steps.discover.outputs.has_python == 'true'
+      - name: Upload Python packages
+        if: needs.discover.outputs.has_python == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: backend-dist
           path: backend/*/dist
           if-no-files-found: error
 
+      - name: Upload Java jars
+        if: needs.discover.outputs.has_java == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-jars
+          path: backend/*/target/*.jar
+          if-no-files-found: error
+
+      - name: Upload Node build output
+        if: needs.discover.outputs.has_node == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-node-dist
+          path: backend/*/dist
+          if-no-files-found: ignore
+
   test:
     name: test
+    needs: discover
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
-      - name: Discover components
-        id: discover
-        shell: bash
-        run: |
-          set -euo pipefail
-          comps=()
-          for f in backend/*/pyproject.toml; do
-            [ -f "$f" ] && comps+=("$(dirname "$f")")
-          done
-          has_frontend=false
-          [ -f frontend/package.json ] && has_frontend=true
-          {
-            echo "components=${comps[*]:-}"
-            echo "has_python=$([ ${#comps[@]} -gt 0 ] && echo true || echo false)"
-            echo "has_frontend=$has_frontend"
-          } >> "$GITHUB_OUTPUT"
-          if [ ${#comps[@]} -eq 0 ] && [ "$has_frontend" = false ]; then
-            echo "::notice::No backend components (backend/*/pyproject.toml) or frontend (frontend/package.json) found; nothing to test."
-          fi
-
-      - uses: actions/setup-python@v7
-        if: steps.discover.outputs.has_python == 'true'
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-          cache-dependency-path: backend/*/pyproject.toml
-
+      # Frontend
       - uses: actions/setup-node@v7
-        if: steps.discover.outputs.has_frontend == 'true'
+        if: needs.discover.outputs.has_frontend == 'true'
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Test frontend
-        if: steps.discover.outputs.has_frontend == 'true'
+        if: needs.discover.outputs.has_frontend == 'true'
         shell: bash
         working-directory: frontend
         run: |
@@ -234,11 +381,19 @@ jobs:
           npm ci
           npm test
 
-      - name: Test backend
-        if: steps.discover.outputs.has_python == 'true'
+      # Python
+      - uses: actions/setup-python@v7
+        if: needs.discover.outputs.has_python == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/*/pyproject.toml
+
+      - name: Test Python backends
+        if: needs.discover.outputs.has_python == 'true'
         shell: bash
         env:
-          COMPONENTS: ${{ steps.discover.outputs.components }}
+          COMPONENTS: ${{ needs.discover.outputs.python }}
         run: |
           set -euo pipefail
           failed=()
@@ -251,6 +406,7 @@ jobs:
             (
               set -euo pipefail
               python -m venv "$RUNNER_TEMP/venv-$(basename "$c")"
+              # shellcheck source=/dev/null
               . "$RUNNER_TEMP/venv-$(basename "$c")/bin/activate"
               cd "$c"
               pip install -e ".[dev]"
@@ -260,20 +416,95 @@ jobs:
             echo "::endgroup::"
           done
           if [ ${#failed[@]} -gt 0 ]; then
-            printf '::error::Tests failed: %s\n' "${failed[@]}"
+            printf '::error::Python tests failed: %s\n' "${failed[@]}"
             exit 1
           fi
 
-      - name: Upload backend coverage
-        if: always() && steps.discover.outputs.has_python == 'true'
+      # Java: `verify` runs unit + integration tests and the JaCoCo report configured in the pom.
+      - uses: actions/setup-java@v5
+        if: needs.discover.outputs.has_java == 'true'
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Test Java backends
+        if: needs.discover.outputs.has_java == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.java }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            echo "::group::mvn verify $c"
+            mvn_bin=mvn; [ -x "$c/mvnw" ] && mvn_bin=./mvnw
+            (cd "$c" && "$mvn_bin" -B -ntp verify) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Maven tests failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      # Node backend
+      - uses: actions/setup-node@v7
+        if: needs.discover.outputs.has_node == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/*/package-lock.json
+
+      - name: Test Node backends
+        if: needs.discover.outputs.has_node == 'true'
+        shell: bash
+        env:
+          COMPONENTS: ${{ needs.discover.outputs.node }}
+        run: |
+          set -euo pipefail
+          failed=()
+          for c in $COMPONENTS; do
+            if ! (cd "$c" && node -e 'process.exit(require("./package.json").scripts?.test ? 0 : 1)'); then
+              echo "::notice::$c has no \"test\" script; skipping."
+              continue
+            fi
+            echo "::group::npm test $c"
+            (cd "$c" && npm ci && npm test) || failed+=("$c")
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error::Node tests failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
+
+      - name: Upload Python coverage
+        if: always() && needs.discover.outputs.has_python == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: backend-coverage
           path: backend/*/coverage.xml
           if-no-files-found: ignore
 
+      - name: Upload Java coverage and reports
+        if: always() && needs.discover.outputs.has_java == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: java-coverage
+          path: |
+            backend/*/target/site/jacoco
+            backend/*/target/surefire-reports
+          if-no-files-found: ignore
+
+      - name: Upload Node coverage
+        if: always() && needs.discover.outputs.has_node == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: node-coverage
+          path: backend/*/coverage
+          if-no-files-found: ignore
+
       - name: Upload frontend coverage
-        if: always() && steps.discover.outputs.has_frontend == 'true'
+        if: always() && needs.discover.outputs.has_frontend == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage

@@ -1,4 +1,4 @@
-# Shared by all backend components; ruff finds it from backend/<component>/.
+# Shared by all Python backend components; ruff finds it from backend/<component>/.
 target-version = "py312"
 line-length = 100
 
