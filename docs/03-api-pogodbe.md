@@ -82,10 +82,14 @@ Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprej
 | DELETE | `/machines/{id}` | OPERATOR | logičen umik; prej `GET /v1/inventory/{machineId}`; umik prekliče vse ključe; ponovitev 204 brez preverjanja | 204; 404, 409 `MACHINE_HAS_STOCK`, 503 |
 | GET | `/machines/{id}/keys` | OPERATOR | samo metapodatki, nikoli skrivnost | 200; 404 |
 | POST | `/machines/{id}/keys` | OPERATOR | ni idempotenten; nov ključ, stari ostanejo veljavni; vrne `machineKey` enkrat | 201; 404, 409 `MACHINE_RETIRED`, `KEY_LIMIT_REACHED` |
-| DELETE | `/machines/{id}/keys/{keyId}` | OPERATOR | preklic, takoj neveljaven; dovoljen tudi za zadnji ključ; ponovitev 204 | 204; 404 `KEY_NOT_FOUND` |
+| DELETE | `/machines/{id}/keys/{keyId}` | OPERATOR | preklic, takoj neveljaven; dovoljen tudi za zadnji ključ; ponovitev 204 | 204; 404 `KEY_NOT_FOUND` (`MACHINE_NOT_FOUND`, če avtomata ni) |
 | POST | `/internal/machine-keys/verify` | gateway | telo `{machineKey}`, odgovor `{machineId, status}`; preklican ključ ali umaknjen avtomat: 401; samo interno | 200; 401 |
 
-- `MachineCreate`: `code` (1–32), `name` (1–100), `address` (1–200), `latitude`, `longitude`, `slots[{slotCode, label?}]` (1–100 predalov; `slotCode` 1–8, `label` največ 40). Predali se po ustvarjanju ne spreminjajo. Odgovor `POST /machines`: `MachineOut` + `machineKey`, `keyId`.
+- `MachineCreate`: `code` (1–32), `name` (1–100), `address` (1–200), `latitude`, `longitude`, `slots[{slotCode, label?}]` (1–100 predalov; `slotCode` 1–8, `label` največ 40). Predali se po ustvarjanju ne spreminjajo. Odgovor `POST /machines` (201): `MachineOut` + `machineKey` in `keyId`; `machineKey` je vrnjen samo enkrat.
+- `latitude` in `longitude` sta JSON števili (ne niza): zemljepisna širina -90 do 90, dolžina -180 do 180.
+- `GET /machines` `bbox` = `minLon,minLat,maxLon,maxLat` (stopinje WGS84).
+- `PUT /machines/{id}` spremeni `name`, `address`, `latitude`, `longitude`; `code` in predali se ne spremenijo.
+- `PUT /machines/{id}/status` sprejme `ACTIVE` in `SERVICE`. Zahteva `RETIRED` vrne 409 `INVALID_STATE_TRANSITION`; umik je samo `DELETE /machines/{id}`.
 - `KeyIn`: `label?` (največ 60). `KeyOut`: `keyId`, `label`, `hint` (zadnji 4 znaki), `status` (`ACTIVE`, `REVOKED`), `createdAt`, `revokedAt?`. `KeyCreated` = `KeyOut` + `machineKey` (samo v odgovoru ustvarjanja).
 - Menjava ključa: ustvari nov ključ, nastavi ga v simulatorju, prekliči starega. Aktivnih ključev je največ 3.
 - Status: `ACTIVE`, `SERVICE`, `RETIRED` (končno); brez parametra `status` seznam vrne `ACTIVE` in `SERVICE`. Avtomat se umakne le, če je v Inventory vsaka količina 0 ali ni zapisov; zaloga se prej izprazni (`DELETE /inventory/{machineId}/{slot}`).
