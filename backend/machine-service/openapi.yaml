@@ -1,0 +1,574 @@
+openapi: 3.1.0
+info:
+  title: Machine Service API
+  version: 1.0.0
+  description: |
+    Vending machines, their slots, administrative status and machine keys.
+    Contract source: docs/03-api-pogodbe.md section 4 (conventions in sections 1 and 2).
+
+    Conventions:
+    - All paths carry the service prefix `/v1`; the gateway exposes them as `/api/v1/...`.
+    - IDs are UUIDs, timestamps are ISO-8601 UTC with `Z`, enums are UPPER_SNAKE.
+    - Request bodies reject unknown fields with 422 `VALIDATION_ERROR`.
+    - Lists return `{items, total, limit, offset}`; `limit` defaults to 50 (max 200).
+    - Every operation can also return 400, 500, 503 and 504; every operation is authenticated
+      (401, 403); 422 applies where a body or parameter exists. These are shared responses.
+    - Each operation lists its allowed callers in `x-callers`. A caller outside that list gets
+      403 `CALLER_NOT_ALLOWED`.
+servers:
+  - url: /
+    description: Service-relative; paths already include the `/v1` prefix.
+tags:
+  - name: Machines
+    description: Machines, slots and administrative status.
+  - name: Machine keys
+    description: Keys a machine uses to authenticate at the gateway.
+  - name: Internal
+    description: Gateway only; never exposed to external clients.
+security:
+  - OperatorId: []
+paths:
+  /v1/machines:
+    get:
+      tags: [Machines]
+      operationId: listMachines
+      summary: List machines
+      description: |
+        Without `status`, returns `ACTIVE` and `SERVICE` machines. Retired machines are
+        returned only with `status=RETIRED`.
+      x-callers: [OPERATOR, inventory, monitoring, frontend-api]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: status
+          in: query
+          description: Filter by status.
+          schema:
+            $ref: '#/components/schemas/MachineStatus'
+        - name: bbox
+          in: query
+          description: 'Bounding box `minLongitude,minLatitude,maxLongitude,maxLatitude` (WGS84 degrees).'
+          schema:
+            type: string
+            pattern: '^-?\d+(\.\d+)?(,-?\d+(\.\d+)?){3}$'
+            examples: ['14.40,46.00,14.60,46.10']
+        - name: q
+          in: query
+          description: Case-insensitive substring match on code, name and address.
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of machines.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineList'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    post:
+      tags: [Machines]
+      operationId: createMachine
+      summary: Create a machine
+      description: |
+        Not idempotent. The new machine is `ACTIVE`. The first machine key is issued and its
+        secret `machineKey` is returned only in this response.
+      x-callers: [OPERATOR]
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MachineCreate'
+      responses:
+        '201':
+          description: Machine created together with its first key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineCreated'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: '`MACHINE_CODE_TAKEN`: another machine already uses this code.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/machines/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Machines]
+      operationId: getMachine
+      summary: Get a machine
+      x-callers: [OPERATOR, inventory, monitoring, frontend-api]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      responses:
+        '200':
+          description: The machine (also when retired).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MachineOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    put:
+      tags: [Machines]
+      operationId: updateMachine
+      summary: Replace machine details
+      description: Idempotent replacement of the editable fields. `code` and `slots` do not change after creation.
+      x-callers: [OPERATOR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MachineUpdate'}
+      responses:
+        '200':
+          description: Updated machine.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MachineOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '409': {$ref: '#/components/responses/MachineRetired'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    delete:
+      tags: [Machines]
+      operationId: retireMachine
+      summary: Retire a machine
+      description: |
+        Logical retirement (status `RETIRED`, terminal). Before retiring, the service calls
+        `GET /v1/inventory/{machineId}` and refuses while any quantity is above 0.
+        Retirement revokes all keys of the machine. Repeating the call returns 204 without
+        re-checking. If Inventory does not answer, the machine stays unchanged and the
+        response is 503.
+      x-callers: [OPERATOR]
+      responses:
+        '204':
+          description: Machine retired (or already retired).
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '409':
+          description: '`MACHINE_HAS_STOCK`: Inventory still holds stock for this machine.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/machines/{id}/status:
+    put:
+      tags: [Machines]
+      operationId: setMachineStatus
+      summary: Change administrative status
+      description: |
+        `ACTIVE` and `SERVICE` switch freely. Setting the current status returns 200 without
+        change. A retired machine returns 409 `MACHINE_RETIRED`. Requesting `RETIRED` here is
+        `INVALID_STATE_TRANSITION`; use `DELETE /v1/machines/{id}`.
+      x-callers: [OPERATOR]
+      parameters:
+        - $ref: '#/components/parameters/MachineId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MachineStatusIn'}
+      responses:
+        '200':
+          description: Machine with its current status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MachineOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '409':
+          description: '`INVALID_STATE_TRANSITION` or `MACHINE_RETIRED`.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/machines/{id}/keys:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Machine keys]
+      operationId: listMachineKeys
+      summary: List keys of a machine
+      description: Metadata only; the secret is never returned. Includes revoked keys.
+      x-callers: [OPERATOR]
+      responses:
+        '200':
+          description: Keys of the machine.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KeyList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    post:
+      tags: [Machine keys]
+      operationId: createMachineKey
+      summary: Issue a new key
+      description: |
+        Not idempotent. Existing keys stay valid. A machine has at most 3 active keys.
+        `machineKey` is returned only in this response. Key rotation: create a new key,
+        configure it in the simulator, then revoke the old one.
+      x-callers: [OPERATOR]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KeyIn'}
+      responses:
+        '201':
+          description: Key created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KeyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '409':
+          description: '`MACHINE_RETIRED` or `KEY_LIMIT_REACHED` (3 active keys already).'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/machines/{id}/keys/{keyId}:
+    delete:
+      tags: [Machine keys]
+      operationId: revokeMachineKey
+      summary: Revoke a key
+      description: Takes effect immediately; allowed for the last active key. Repeating the call returns 204.
+      x-callers: [OPERATOR]
+      parameters:
+        - $ref: '#/components/parameters/MachineId'
+        - name: keyId
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '204':
+          description: Key revoked (or already revoked).
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404':
+          description: '`KEY_NOT_FOUND` (or `MACHINE_NOT_FOUND` when the machine is unknown).'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/internal/machine-keys/verify:
+    post:
+      tags: [Internal]
+      operationId: verifyMachineKey
+      summary: Verify a machine key (internal)
+      description: |
+        Internal, gateway only; never routed to external clients. Returns the machine of an
+        active key. A revoked or unknown key, or a retired machine, returns 401
+        `UNAUTHENTICATED`.
+      x-internal: true
+      x-callers: [gateway]
+      security:
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MachineKeyVerifyIn'}
+      responses:
+        '200':
+          description: Key is valid.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MachineKeyVerifyOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+components:
+  securitySchemes:
+    OperatorId:
+      type: apiKey
+      in: header
+      name: X-Operator-Id
+      description: Set by the gateway after verifying the operator JWT; any client-sent value is stripped there.
+    ServiceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: Internal token of the calling component (one per component, from the environment).
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: Trace id created at the gateway and propagated between services.
+      schema: {type: string}
+    MachineId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    Offset:
+      name: offset
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+  responses:
+    BadRequest:
+      description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed UUID.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthenticated:
+      description: '`UNAUTHENTICATED`: missing, invalid or revoked token or key.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: '`FORBIDDEN` or `CALLER_NOT_ALLOWED`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    MachineNotFound:
+      description: '`MACHINE_NOT_FOUND`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    MachineRetired:
+      description: '`MACHINE_RETIRED`: a retired machine cannot be changed.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ValidationError:
+      description: '`VALIDATION_ERROR` with `details`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InternalError:
+      description: '`INTERNAL_ERROR`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    DependencyUnavailable:
+      description: '`DEPENDENCY_UNAVAILABLE`: a dependency (for example Inventory) does not answer; the client retries.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UpstreamTimeout:
+      description: '`UPSTREAM_TIMEOUT`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+          description: Machine-readable code, for example `MACHINE_CODE_TAKEN`.
+          examples: [MACHINE_CODE_TAKEN]
+        message:
+          type: string
+          description: Short English text; the UI maps `code` to Slovenian.
+        traceId:
+          type: string
+        details:
+          type: array
+          description: Only for `VALIDATION_ERROR`.
+          items: {$ref: '#/components/schemas/ValidationErrorDetail'}
+    ValidationErrorDetail:
+      type: object
+      required: [field, issue]
+      properties:
+        field: {type: string, examples: [latitude]}
+        issue: {type: string, examples: ['must be <= 90']}
+    MachineStatus:
+      type: string
+      enum: [ACTIVE, SERVICE, RETIRED]
+      description: '`RETIRED` is terminal.'
+    SlotIn:
+      type: object
+      required: [slotCode]
+      properties:
+        slotCode: {type: string, minLength: 1, maxLength: 8, examples: [A1]}
+        label: {type: string, maxLength: 40}
+      additionalProperties: false
+    SlotOut:
+      type: object
+      required: [slotCode]
+      properties:
+        slotCode: {type: string, minLength: 1, maxLength: 8}
+        label: {type: ['string', 'null'], maxLength: 40}
+    MachineCreate:
+      type: object
+      required: [code, name, address, latitude, longitude, slots]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 32}
+        name: {type: string, minLength: 1, maxLength: 100}
+        address: {type: string, minLength: 1, maxLength: 200}
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+        slots:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Slots do not change after creation; `slotCode` values must be unique within the machine.
+          items: {$ref: '#/components/schemas/SlotIn'}
+      additionalProperties: false
+    MachineUpdate:
+      type: object
+      required: [name, address, latitude, longitude]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100}
+        address: {type: string, minLength: 1, maxLength: 200}
+        latitude: {type: number, minimum: -90, maximum: 90}
+        longitude: {type: number, minimum: -180, maximum: 180}
+      additionalProperties: false
+    MachineStatusIn:
+      type: object
+      required: [status]
+      properties:
+        status: {$ref: '#/components/schemas/MachineStatus'}
+      additionalProperties: false
+    MachineOut:
+      type: object
+      required: [id, code, name, address, latitude, longitude, status, slots, createdAt, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string, maxLength: 32}
+        name: {type: string, maxLength: 100}
+        address: {type: string, maxLength: 200}
+        latitude: {type: number}
+        longitude: {type: number}
+        status: {$ref: '#/components/schemas/MachineStatus'}
+        slots:
+          type: array
+          items: {$ref: '#/components/schemas/SlotOut'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    MachineCreated:
+      description: '`MachineOut` plus the first key; `machineKey` appears only in this response.'
+      allOf:
+        - $ref: '#/components/schemas/MachineOut'
+        - type: object
+          required: [machineKey, keyId]
+          properties:
+            machineKey: {type: string, description: Secret; shown once.}
+            keyId: {type: string, format: uuid}
+    MachineList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MachineOut'}
+        total: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+    KeyStatus:
+      type: string
+      enum: [ACTIVE, REVOKED]
+    KeyIn:
+      type: object
+      properties:
+        label: {type: string, maxLength: 60}
+      additionalProperties: false
+    KeyOut:
+      type: object
+      required: [keyId, hint, status, createdAt]
+      properties:
+        keyId: {type: string, format: uuid}
+        label: {type: ['string', 'null'], maxLength: 60}
+        hint: {type: string, minLength: 4, maxLength: 4, description: Last 4 characters of the key.}
+        status: {$ref: '#/components/schemas/KeyStatus'}
+        createdAt: {type: string, format: date-time}
+        revokedAt: {type: ['string', 'null'], format: date-time}
+    KeyCreated:
+      description: '`KeyOut` plus the secret `machineKey`, returned only when the key is created.'
+      allOf:
+        - $ref: '#/components/schemas/KeyOut'
+        - type: object
+          required: [machineKey]
+          properties:
+            machineKey: {type: string, description: Secret; shown once.}
+    KeyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/KeyOut'}
+    MachineKeyVerifyIn:
+      type: object
+      required: [machineKey]
+      properties:
+        machineKey: {type: string, minLength: 1}
+      additionalProperties: false
+    MachineKeyVerifyOut:
+      type: object
+      required: [machineId, status]
+      properties:
+        machineId: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/MachineStatus'}
