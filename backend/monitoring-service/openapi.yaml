@@ -1,0 +1,736 @@
+openapi: 3.1.0
+info:
+  title: Monitoring Service API
+  version: 1.0.0
+  description: |
+    Measurements, machine status, alerts and alert thresholds.
+    Contract source: docs/03-api-pogodbe.md section 5 (conventions in sections 1 and 2,
+    `MeasurementIn` in section 3.2); alert rules: docs/01-arhitektura.md section 6.2.
+
+    Conventions:
+    - All paths carry the service prefix `/v1`; the gateway exposes them as `/api/v1/...`.
+    - IDs are UUIDs, timestamps are ISO-8601 UTC with `Z`, temperatures are decimal strings
+      (for example `"4.2"`), enums are UPPER_SNAKE.
+    - Request bodies reject unknown fields with 422 `VALIDATION_ERROR`.
+    - Lists return `{items, total, limit, offset}`; `limit` defaults to 50 (max 200).
+    - Every operation can also return 400, 500, 503 and 504; every operation is authenticated
+      (401, 403); 422 applies where a body or parameter exists. These are shared responses.
+    - Each operation lists its allowed callers in `x-callers`. A caller outside that list gets
+      403 `CALLER_NOT_ALLOWED`. Internal operations are marked `x-internal: true`.
+    - `MeasurementIn` is a shared component: the Sales, Monitoring and Gateway specifications
+      carry identical copies (docs/03 section 10).
+servers:
+  - url: /
+    description: Service-relative; paths already include the `/v1` prefix.
+tags:
+  - name: Measurements
+    description: Temperature and door readings sent by machines.
+  - name: Status
+    description: Reachability and last reading of a machine.
+  - name: Alerts
+    description: Alerts, acknowledgement and manual resolution.
+  - name: Thresholds
+    description: Per-machine alert thresholds.
+  - name: Internal
+    description: Service-to-service only; never exposed to external clients.
+security:
+  - OperatorId: []
+paths:
+  /v1/measurements:
+    post:
+      tags: [Measurements]
+      operationId: createMeasurement
+      summary: Record a measurement
+      description: |
+        Sent by the machine (simulator) through the gateway path `/api/v1/device/measurements`.
+        The gateway verifies the machine key and sets `X-Machine-Id`; `machineId` in the body
+        must equal it. Idempotent by `measurementId`: the same id with the same body returns 200
+        without re-evaluating alert rules; the same id with a different body returns 409
+        `MEASUREMENT_ID_CONFLICT`. A new measurement triggers alert rule evaluation
+        (docs/01 section 6.2).
+      x-callers: [MACHINE]
+      security:
+        - MachineId: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MeasurementIn'}
+      responses:
+        '201':
+          description: Measurement stored (first time).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeasurementOut'}
+        '200':
+          description: Same `measurementId` with the same body was already stored; nothing changed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeasurementOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403':
+          description: '`MACHINE_KEY_MISMATCH` (body `machineId` is not the machine of the key), `FORBIDDEN` or `CALLER_NOT_ALLOWED`.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: '`MEASUREMENT_ID_CONFLICT`: the same `measurementId` was stored with a different body.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: '`VALIDATION_ERROR` (with `details`), `REFERENCE_NOT_FOUND` (unknown machine) or `TIMESTAMP_OUT_OF_RANGE` (`observedAt` more than 5 minutes in the future).'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/measurements/{machineId}:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Measurements]
+      operationId: listMeasurements
+      summary: List measurements of a machine
+      description: |
+        Ordered by `observedAt` ascending. The window `from`..`to` is at most 7 days; by default
+        it is the last 24 hours (`to` = now, `from` = `to` minus 24 h). A larger window or
+        `from` after `to` returns 422 `VALIDATION_ERROR`.
+      x-callers: [OPERATOR, frontend-api]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      parameters:
+        - name: from
+          in: query
+          description: Start of the window (inclusive).
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          description: End of the window (exclusive).
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of measurements in the window.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MeasurementList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    delete:
+      tags: [Measurements]
+      operationId: purgeMeasurements
+      summary: Purge old measurements of a machine
+      description: |
+        Permanent deletion of measurements observed before `before`, which must be older than
+        7 days. Alerts are not deleted. Repeating the call returns 200 with `deleted: 0`.
+      x-callers: [OPERATOR]
+      parameters:
+        - name: before
+          in: query
+          required: true
+          description: Delete measurements observed strictly before this instant; must be more than 7 days in the past.
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Number of deleted measurements.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PurgeResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '422':
+          description: '`VALIDATION_ERROR`: `before` is missing or not older than 7 days.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/monitoring/{machineId}/status:
+    get:
+      tags: [Status]
+      operationId: getMachineStatus
+      summary: Get reachability and last measurement
+      description: |
+        `ONLINE` when the last measurement is not older than `noDataMaxSeconds`, `OFFLINE` when
+        it is older, `UNKNOWN` when the machine has no measurement yet.
+      x-callers: [OPERATOR, frontend-api]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/MachineId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: Current monitoring status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MachineMonitoringStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/alerts:
+    get:
+      tags: [Alerts]
+      operationId: listAlerts
+      summary: List alerts
+      description: Newest first (by `openedAt`). Filters combine with AND.
+      x-callers: [OPERATOR, frontend-api]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: machineId
+          in: query
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/AlertStatus'}
+        - name: acknowledged
+          in: query
+          description: '`true` only acknowledged alerts, `false` only unacknowledged ones.'
+          schema: {type: boolean}
+        - name: type
+          in: query
+          schema: {$ref: '#/components/schemas/AlertType'}
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of alerts.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    post:
+      tags: [Internal]
+      operationId: reportLowStock
+      summary: Report low stock of a machine (internal)
+      description: |
+        Internal, Inventory only; never routed to external clients. The report lists the slots
+        of one machine that are at or below their threshold. It is the full current picture:
+        - no active `LOW_STOCK` alert and `slots` not empty: opens one (201);
+        - an active alert and `slots` not empty: replaces its slot list (200);
+        - `slots` empty: resolves the active alert automatically (200), or changes nothing
+          when there is none (200).
+        Idempotent by `version` (increasing per machine): a version lower than or equal to the
+        last accepted one returns 200 without change (`outcome: IGNORED`). `LOW_STOCK` is
+        resolved only by this report, never by an operator.
+      x-internal: true
+      x-callers: [inventory]
+      security:
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LowStockReport'}
+      responses:
+        '201':
+          description: A new `LOW_STOCK` alert was opened.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LowStockReportResult'}
+        '200':
+          description: Report accepted without opening an alert (updated, resolved, ignored or nothing to do).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LowStockReportResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403':
+          description: '`CALLER_NOT_ALLOWED`: only Inventory may report (internal operation).'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422':
+          description: '`VALIDATION_ERROR` (with `details`) or `REFERENCE_NOT_FOUND` (unknown machine).'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/alerts/{id}/acknowledgement:
+    put:
+      tags: [Alerts]
+      operationId: acknowledgeAlert
+      summary: Acknowledge an active alert
+      description: |
+        No request body; `acknowledgedBy` is the `X-Operator-Id`. Acknowledgement does not
+        resolve the alert. Repeating the call returns 200 without change and keeps the first
+        acknowledgement. An already resolved alert returns 409 `ALERT_NOT_ACTIVE`.
+      x-callers: [OPERATOR]
+      parameters:
+        - $ref: '#/components/parameters/AlertId'
+        - $ref: '#/components/parameters/TraceId'
+      responses:
+        '200':
+          description: The alert with its acknowledgement.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/AlertNotFound'}
+        '409':
+          description: '`ALERT_NOT_ACTIVE`: the alert is already resolved.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/alerts/{id}/resolution:
+    put:
+      tags: [Alerts]
+      operationId: resolveAlert
+      summary: Resolve an alert manually
+      description: |
+        Allowed only for `TEMPERATURE_HIGH`, `DOOR_OPEN` and `OFFLINE`; does not require
+        acknowledgement. Sets `resolution: MANUAL`. If the condition persists, the next
+        evaluation opens a new alert. Repeating the call on a resolved alert returns 200
+        without change. `LOW_STOCK` returns 409 `ALERT_TYPE_NOT_RESOLVABLE`.
+      x-callers: [OPERATOR]
+      parameters:
+        - $ref: '#/components/parameters/AlertId'
+        - $ref: '#/components/parameters/TraceId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResolveIn'}
+      responses:
+        '200':
+          description: The resolved alert.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/AlertNotFound'}
+        '409':
+          description: '`ALERT_TYPE_NOT_RESOLVABLE`: `LOW_STOCK` is resolved only by the Inventory report.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/thresholds/{machineId}:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Thresholds]
+      operationId: getThresholds
+      summary: Get thresholds of a machine
+      description: 'Without stored thresholds returns the defaults with `isDefault: true`.'
+      x-callers: [OPERATOR]
+      responses:
+        '200':
+          description: Effective thresholds.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ThresholdsOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    put:
+      tags: [Thresholds]
+      operationId: replaceThresholds
+      summary: Replace thresholds of a machine
+      description: Idempotent replacement. `resetTempC` must be lower than `maxTempC`, otherwise 422 `VALIDATION_ERROR`.
+      x-callers: [OPERATOR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ThresholdsIn'}
+      responses:
+        '200':
+          description: Stored thresholds.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ThresholdsOut'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+    delete:
+      tags: [Thresholds]
+      operationId: resetThresholds
+      summary: Reset thresholds to the defaults
+      description: Deletes the stored thresholds. Repeating the call returns 204.
+      x-callers: [OPERATOR]
+      responses:
+        '204':
+          description: Thresholds reset (or already default).
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+components:
+  securitySchemes:
+    OperatorId:
+      type: apiKey
+      in: header
+      name: X-Operator-Id
+      description: Set by the gateway after verifying the operator JWT; any client-sent value is stripped there.
+    MachineId:
+      type: apiKey
+      in: header
+      name: X-Machine-Id
+      description: Set by the gateway after verifying the machine key (`X-Machine-Key`); any client-sent value is stripped there.
+    ServiceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: Internal token of the calling component (one per component, from the environment).
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: Trace id created at the gateway and propagated between services.
+      schema: {type: string}
+    MachineId:
+      name: machineId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    AlertId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    Offset:
+      name: offset
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+  responses:
+    BadRequest:
+      description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed UUID.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthenticated:
+      description: '`UNAUTHENTICATED`: missing, invalid or revoked token or key.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: '`FORBIDDEN` or `CALLER_NOT_ALLOWED`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    MachineNotFound:
+      description: '`MACHINE_NOT_FOUND`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    AlertNotFound:
+      description: '`ALERT_NOT_FOUND`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ValidationError:
+      description: '`VALIDATION_ERROR` with `details`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InternalError:
+      description: '`INTERNAL_ERROR`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    DependencyUnavailable:
+      description: '`DEPENDENCY_UNAVAILABLE`: a dependency does not answer; the client retries.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UpstreamTimeout:
+      description: '`UPSTREAM_TIMEOUT`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+          description: Machine-readable code, for example `ALERT_NOT_FOUND`.
+          examples: [ALERT_NOT_FOUND]
+        message:
+          type: string
+          description: Short English text; the UI maps `code` to Slovenian.
+        traceId:
+          type: string
+        details:
+          type: array
+          description: Only for `VALIDATION_ERROR`.
+          items: {$ref: '#/components/schemas/ValidationErrorDetail'}
+    ValidationErrorDetail:
+      type: object
+      required: [field, issue]
+      properties:
+        field: {type: string, examples: [temperatureC]}
+        issue: {type: string, examples: ['must be a decimal string']}
+    DecimalString:
+      type: string
+      pattern: '^-?\d+(\.\d+)?$'
+      description: Decimal number as a string (no floating point).
+      examples: ['4.2']
+    DoorState:
+      type: string
+      enum: [OPEN, CLOSED]
+    Reachability:
+      type: string
+      enum: [ONLINE, OFFLINE, UNKNOWN]
+    AlertType:
+      type: string
+      enum: [TEMPERATURE_HIGH, DOOR_OPEN, OFFLINE, LOW_STOCK]
+    AlertStatus:
+      type: string
+      enum: [ACTIVE, RESOLVED]
+      description: Independent of acknowledgement.
+    Resolution:
+      type: string
+      enum: [AUTO, MANUAL]
+    NotificationStatus:
+      type: string
+      enum: [PENDING, SENT, FAILED]
+    MeasurementIn:
+      type: object
+      description: One reading of a machine. Shared component (docs/03 sections 3.2 and 10).
+      required: [measurementId, machineId, observedAt, temperatureC, doorState]
+      properties:
+        measurementId:
+          type: string
+          format: uuid
+          description: Created by the simulator; the idempotency key.
+        machineId:
+          type: string
+          format: uuid
+          description: Must be the machine of the key (`X-Machine-Id`).
+        observedAt:
+          type: string
+          format: date-time
+          description: UTC; at most 5 minutes in the future.
+        temperatureC:
+          $ref: '#/components/schemas/DecimalString'
+        doorState:
+          $ref: '#/components/schemas/DoorState'
+      additionalProperties: false
+      examples:
+        - measurementId: 9e2d7b30-8c41-4a6f-b5d2-0a3f6c8e1d92
+          machineId: 0d9c4a52-3b1e-4f6a-8c27-91e5a7b3d410
+          observedAt: '2026-11-17T08:30:00Z'
+          temperatureC: '4.2'
+          doorState: CLOSED
+    MeasurementOut:
+      type: object
+      required: [measurementId, machineId, observedAt, temperatureC, doorState, receivedAt]
+      properties:
+        measurementId: {type: string, format: uuid}
+        machineId: {type: string, format: uuid}
+        observedAt: {type: string, format: date-time}
+        temperatureC: {$ref: '#/components/schemas/DecimalString'}
+        doorState: {$ref: '#/components/schemas/DoorState'}
+        receivedAt: {type: string, format: date-time}
+    MeasurementList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/MeasurementOut'}
+        total: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+    PurgeResult:
+      type: object
+      required: [deleted]
+      properties:
+        deleted: {type: integer, minimum: 0}
+    MachineMonitoringStatus:
+      type: object
+      required: [machineId, reachability, lastMeasurement]
+      properties:
+        machineId: {type: string, format: uuid}
+        reachability: {$ref: '#/components/schemas/Reachability'}
+        lastMeasurement:
+          description: Null when `reachability` is `UNKNOWN`.
+          oneOf:
+            - $ref: '#/components/schemas/MeasurementOut'
+            - type: 'null'
+    LowStockSlot:
+      type: object
+      required: [slotCode, productId, quantity, lowStockThreshold]
+      properties:
+        slotCode: {type: string, minLength: 1, maxLength: 8, examples: [A1]}
+        productId: {type: string, format: uuid}
+        quantity: {type: integer, minimum: 0}
+        lowStockThreshold: {type: integer, minimum: 0}
+      additionalProperties: false
+    LowStockReport:
+      type: object
+      description: Full current low-stock picture of one machine, sent by Inventory.
+      required: [machineId, type, version, slots]
+      properties:
+        machineId: {type: string, format: uuid}
+        type:
+          type: string
+          enum: [LOW_STOCK]
+        version:
+          type: integer
+          minimum: 1
+          description: Increasing per machine; a version not above the last accepted one is ignored.
+        slots:
+          type: array
+          maxItems: 100
+          description: Slots at or below their threshold. Empty resolves the alert.
+          items: {$ref: '#/components/schemas/LowStockSlot'}
+      additionalProperties: false
+    LowStockReportResult:
+      type: object
+      required: [outcome, alert]
+      properties:
+        outcome:
+          type: string
+          enum: [OPENED, UPDATED, RESOLVED, IGNORED, NO_CHANGE]
+          description: |
+            `OPENED` (201), `UPDATED` (slot list replaced), `RESOLVED` (empty report resolved
+            the alert), `IGNORED` (stale version), `NO_CHANGE` (empty report, nothing active).
+        alert:
+          description: The affected alert; null when `outcome` is `NO_CHANGE`.
+          oneOf:
+            - $ref: '#/components/schemas/AlertOut'
+            - type: 'null'
+    AlertNotification:
+      type: object
+      required: [status, attempts]
+      properties:
+        status: {$ref: '#/components/schemas/NotificationStatus'}
+        attempts: {type: integer, minimum: 0}
+    AlertOut:
+      type: object
+      required: [id, machineId, type, status, openedAt, acknowledgedAt, acknowledgedBy, resolvedAt, resolvedBy, resolution, resolutionNote, notification]
+      properties:
+        id: {type: string, format: uuid}
+        machineId: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/AlertType'}
+        status: {$ref: '#/components/schemas/AlertStatus'}
+        openedAt: {type: string, format: date-time}
+        acknowledgedAt: {type: ['string', 'null'], format: date-time}
+        acknowledgedBy:
+          type: ['string', 'null']
+          format: uuid
+          description: Operator id (`X-Operator-Id`).
+        resolvedAt: {type: ['string', 'null'], format: date-time}
+        resolvedBy:
+          type: ['string', 'null']
+          format: uuid
+          description: Operator id for a manual resolution; null for `AUTO`.
+        resolution:
+          oneOf:
+            - $ref: '#/components/schemas/Resolution'
+            - type: 'null'
+        resolutionNote: {type: ['string', 'null'], maxLength: 500}
+        notification: {$ref: '#/components/schemas/AlertNotification'}
+        slots:
+          type: array
+          description: Only for `LOW_STOCK`.
+          items: {$ref: '#/components/schemas/LowStockSlot'}
+    AlertList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AlertOut'}
+        total: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+    ResolveIn:
+      type: object
+      properties:
+        note: {type: string, maxLength: 500}
+      additionalProperties: false
+    ThresholdsIn:
+      type: object
+      required: [maxTempC, resetTempC, consecutiveReadings, doorOpenMaxSeconds, noDataMaxSeconds]
+      properties:
+        maxTempC:
+          $ref: '#/components/schemas/DecimalString'
+          description: Opens `TEMPERATURE_HIGH` when exceeded `consecutiveReadings` times in a row. Default `"8.0"`.
+        resetTempC:
+          $ref: '#/components/schemas/DecimalString'
+          description: Resolves `TEMPERATURE_HIGH` at or below this value; must be lower than `maxTempC`. Default `"7.0"`.
+        consecutiveReadings: {type: integer, minimum: 1, maximum: 100, description: 'Default 2.'}
+        doorOpenMaxSeconds: {type: integer, minimum: 1, maximum: 86400, description: 'Default 120.'}
+        noDataMaxSeconds: {type: integer, minimum: 1, maximum: 86400, description: 'Default 300.'}
+      additionalProperties: false
+    ThresholdsOut:
+      type: object
+      required: [machineId, maxTempC, resetTempC, consecutiveReadings, doorOpenMaxSeconds, noDataMaxSeconds, isDefault]
+      properties:
+        machineId: {type: string, format: uuid}
+        maxTempC: {$ref: '#/components/schemas/DecimalString'}
+        resetTempC: {$ref: '#/components/schemas/DecimalString'}
+        consecutiveReadings: {type: integer, minimum: 1}
+        doorOpenMaxSeconds: {type: integer, minimum: 1}
+        noDataMaxSeconds: {type: integer, minimum: 1}
+        isDefault:
+          type: boolean
+          description: True when no thresholds are stored and the defaults apply.
