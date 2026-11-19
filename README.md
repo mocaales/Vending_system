@@ -10,15 +10,15 @@ Projekt pri predmetu Storitveno usmerjene arhitekture (FERI UM), skupina_10, nov
 
 | Član | Komponente |
 |---|---|
-| Aleš Močnik | Machine Service, Monitoring Service, Sales Service |
-| Nejc Cekuta | Product Service, Inventory Service |
-| Darko Sever | Frontend (Web UI, Frontend API in API Gateway) |
+| Aleš Močnik | Machine Service, Monitoring Service, Sales Service, `docker-compose.yml` |
+| Nejc Cekuta | Product Service, Inventory Service, simulator, skripte `seed.py` in `export_openapi.py`, Web UI (izdelki, kategorije, zaloga) |
+| Darko Sever | Frontend (Web UI brez izdelkov, kategorij in zaloge; Frontend API in API Gateway), opravilo `smoke` v CI |
 
 ## Struktura repozitorija
 
 | Mapa | Vsebina | Lastnik |
 |---|---|---|
-| `frontend/` | Web UI (React, TypeScript, Vite) | Darko |
+| `frontend/` | Web UI (React, TypeScript, Vite) | Darko; izdelki, kategorije in zaloga Nejc |
 | `backend/` | 5 poslovnih storitev, API Gateway in Frontend API, simulator, skripte (seed, izvoz OpenAPI, smoke test) | Aleš, Nejc, Darko ([backend/README.md](backend/README.md)) |
 | `docs/` | dokumentacija in potrjena zasnova | skupno |
 | `.github/workflows/` | CI (GitHub Actions) | skupno |
@@ -28,7 +28,7 @@ Projekt pri predmetu Storitveno usmerjene arhitekture (FERI UM), skupina_10, nov
 | Dokument | Vsebina |
 |---|---|
 | [docs/01-arhitektura.md](docs/01-arhitektura.md) | kako sistem deluje: komponente, tokovi, stanja, varnost, zagon v Dockerju |
-| [docs/02-razdelitev-dela.md](docs/02-razdelitev-dela.md) | kdo kaj dela, mejniki, demonstracija, odprte odločitve |
+| [docs/02-razdelitev-dela.md](docs/02-razdelitev-dela.md) | kdo kaj dela, mejniki, demonstracija, sprejete odločitve |
 | [docs/03-api-pogodbe.md](docs/03-api-pogodbe.md) | API: konvencije, dogodka, končne točke, kode napak |
 | [docs/skupina_10.pdf](docs/skupina_10.pdf) | potrjena idejna zasnova (izhodišče obsega); nastala pred posodobitvijo zahtev predmeta, zato pri razlikah velja `docs/01`–`03` (tehnologije, baze, prijava, končne točke) |
 
