@@ -117,6 +117,13 @@ Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprej
 - E-pošto alarmov pošlje Monitoring na naslove iz `ALERT_EMAIL_TO` (en ali več, ločenih z vejico; [01 §10](01-arhitektura.md#10-zagon-v-dockerju)).
 - E-pošta `LOW_STOCK` vsebuje nazive izdelkov iz `GET /v1/products/{id}`; če Product ne odgovori, vsebuje `productId` in se ne zadrži.
 
+- `POST /measurements`: gateway iz ključa naprave nastavi `X-Machine-Id`; `machineId` v telesu mora biti enak, sicer 403 `MACHINE_KEY_MISMATCH`. Neznan avtomat: 422 `REFERENCE_NOT_FOUND`.
+- `GET /measurements/{machineId}` vrne seznam `{items, total, limit, offset}`, najstarejše najprej. Okno `from`–`to` je največ 7 dni; večje okno ali `from` po `to`: 422 `VALIDATION_ERROR`.
+- `DELETE /measurements/{machineId}`: `before` je obvezen. Odgovor `deleted` je število izbrisanih meritev.
+- `POST /alerts` (interno) vrne `outcome`: `OPENED` (201); `UPDATED`, `RESOLVED`, `IGNORED` (starejša ali enaka verzija) in `NO_CHANGE` (200).
+- Dosegljivost: `ONLINE`, če zadnja meritev ni starejša od `noDataMaxSeconds`; `OFFLINE`, če je starejša; `UNKNOWN`, če meritve še ni.
+- `PUT /alerts/{id}/acknowledgement` na razrešenem alarmu vrne 409 `ALERT_NOT_ACTIVE`; ponovitev na aktivnem alarmu vrne 200. `PUT /alerts/{id}/resolution` sprejme neobvezen `note` (največ 500 znakov).
+
 ## 6. Product (Nejc)
 
 | Metoda | Pot | Kdo kliče | Opomba | Odgovor |
