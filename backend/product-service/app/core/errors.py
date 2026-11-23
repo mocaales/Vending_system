@@ -5,9 +5,40 @@ from http import HTTPStatus
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from starlette.exceptions import HTTPException
 
 from app.core.trace import current_trace_id
+
+
+class ErrorDetail(BaseModel):
+    field: str
+    issue: str
+
+
+class ErrorOut(BaseModel):
+    """Telo napake, kot ga opisuje OpenAPI."""
+
+    code: str
+    message: str
+    traceId: str
+    details: list[ErrorDetail] | None = None
+
+
+# Napake, ki jih lahko vrne vsaka pot (docs/03 §1).
+COMMON_ERRORS = {
+    400: "`BAD_REQUEST`: unreadable JSON, bad parameter or malformed UUID.",
+    401: "`UNAUTHENTICATED`: missing or invalid service token or operator identity.",
+    403: "`CALLER_NOT_ALLOWED`: the caller may not use this operation.",
+    422: "`VALIDATION_ERROR` with `details`.",
+    500: "`INTERNAL_ERROR`.",
+    503: "`DEPENDENCY_UNAVAILABLE`: the database or a dependency does not answer.",
+}
+
+
+def error_docs(errors: dict[int, str]) -> dict:
+    """Opis napak za OpenAPI, npr. error_docs({404: "`PRODUCT_NOT_FOUND`."})."""
+    return {status: {"model": ErrorOut, "description": text} for status, text in errors.items()}
 
 
 class ApiError(Exception):
