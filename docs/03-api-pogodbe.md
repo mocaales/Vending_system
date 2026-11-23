@@ -141,6 +141,7 @@ Vsa polja so obvezna. `saleId` ustvari simulator in ga hrani do potrjenega sprej
 
 - `CategoryIn`: `name` (1–60, enolično ne glede na velike in male črke), `description?` (največ 200). `CategoryOut`: `id`, `name`, `description`.
 - `ProductIn`: `name` (1–100), `categoryId`, `referencePrice`, `currency` (v prototipu `EUR`), `weightGrams`, `allergens[]`, `imageUrl`. `ProductOut` vrne še `categoryName` in `status`.
+- Vsa polja `ProductIn` so obvezna: `weightGrams` 1–100000, `allergens` največ 20 nizov (vsak 1–50 znakov, lahko prazen seznam), `imageUrl` URL do 500 znakov. Filter `q` išče po nazivu ne glede na velike in male črke; seznam je razvrščen po nazivu.
 
 ## 7. Inventory (Nejc)
 
