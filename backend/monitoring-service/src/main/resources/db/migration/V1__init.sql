@@ -1,0 +1,1 @@
+-- Začetna prazna migracija monitoring-service; sheme dodajo poslovni issueji.
