@@ -1,0 +1,264 @@
+openapi: 3.1.0
+info:
+  title: Product Service API
+  version: 1.0.0
+  description: |
+    Product catalogue (products and categories).
+    Contract source: docs/03-api-pogodbe.md section 6 (conventions in sections 1 and 2).
+    This contract covers reading products, which other services need; creating, changing and
+    archiving products and the categories follow in their own issues.
+
+    Conventions:
+    - All paths carry the service prefix `/v1`; the gateway exposes them as `/api/v1/...`.
+    - IDs are UUIDs, money is a decimal string (`"2.50"`), enums are UPPER_SNAKE.
+    - Request bodies reject unknown fields with 422 `VALIDATION_ERROR`.
+    - Lists return `{items, total, limit, offset}`; `limit` defaults to 50 (max 200).
+    - Every operation can also return 400, 500, 503 and 504; every operation is authenticated
+      (401, 403); 422 applies where a body or parameter exists. These are shared responses.
+    - Each operation lists its allowed callers in `x-callers`. A caller outside that list gets
+      403 `CALLER_NOT_ALLOWED`.
+    - A product has no `sku`; product names may repeat.
+servers:
+  - url: /
+    description: Service-relative; paths already include the `/v1` prefix.
+tags:
+  - name: Products
+    description: Products of the catalogue.
+paths:
+  /v1/products:
+    get:
+      tags: [Products]
+      operationId: listProducts
+      summary: List products
+      description: |
+        Without `status`, returns only `ACTIVE` products. Sorted by name.
+      x-callers: [OPERATOR, frontend-api, inventory, sales]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - name: q
+          in: query
+          description: Case-insensitive substring match on the product name.
+          schema:
+            type: string
+            maxLength: 100
+        - name: categoryId
+          in: query
+          description: Only products of this category.
+          schema: {type: string, format: uuid}
+        - name: status
+          in: query
+          description: Filter by status (default `ACTIVE`).
+          schema:
+            $ref: '#/components/schemas/ProductStatus'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of products.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductList'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/products/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Products]
+      operationId: getProduct
+      summary: Get a product
+      description: |
+        Returns archived products too, so that past sales and alerts can still show the name.
+      x-callers: [OPERATOR, frontend-api, inventory, sales, monitoring]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      responses:
+        '200':
+          description: The product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductOut'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/ProductNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+components:
+  securitySchemes:
+    OperatorId:
+      type: apiKey
+      in: header
+      name: X-Operator-Id
+      description: Set by the gateway after verifying the operator JWT; any client-sent value is stripped there.
+    ServiceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: Internal token of the calling component (one per component, from the environment).
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: Trace id created at the gateway and propagated between services.
+      schema: {type: string}
+    ProductId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    Offset:
+      name: offset
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+  responses:
+    BadRequest:
+      description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed UUID.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthenticated:
+      description: '`UNAUTHENTICATED`: missing or invalid service token or operator identity.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: '`CALLER_NOT_ALLOWED`: the caller may not use this operation.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ProductNotFound:
+      description: '`PRODUCT_NOT_FOUND`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ValidationError:
+      description: '`VALIDATION_ERROR` with `details`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InternalError:
+      description: '`INTERNAL_ERROR`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    DependencyUnavailable:
+      description: '`DEPENDENCY_UNAVAILABLE`: the database or a dependency does not answer; the client retries.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UpstreamTimeout:
+      description: '`UPSTREAM_TIMEOUT`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+          description: Machine-readable code, for example `PRODUCT_NOT_FOUND`.
+          examples: [PRODUCT_NOT_FOUND]
+        message:
+          type: string
+          description: Short English text; the UI maps `code` to Slovenian.
+        traceId:
+          type: string
+        details:
+          type: array
+          description: Only for `VALIDATION_ERROR`.
+          items: {$ref: '#/components/schemas/ValidationErrorDetail'}
+    ValidationErrorDetail:
+      type: object
+      required: [field, issue]
+      properties:
+        field: {type: string, examples: [name]}
+        issue: {type: string, examples: ['String should have at most 100 characters']}
+    Money:
+      type: string
+      pattern: '^\d{1,10}(\.\d{1,2})?$'
+      description: Non-negative decimal string, at most 2 decimals.
+      examples: ['2.50']
+    Currency:
+      type: string
+      pattern: '^[A-Z]{3}$'
+      description: ISO 4217 code; `EUR` in the prototype.
+      examples: [EUR]
+    ProductStatus:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+      description: '`ARCHIVED` products are no longer offered, but stay readable by id.'
+    ProductIn:
+      type: object
+      description: Body for creating or replacing a product.
+      required: [name, categoryId, referencePrice, currency, weightGrams, allergens, imageUrl]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 100, examples: [Domače mleko 1 l]}
+        categoryId: {type: string, format: uuid}
+        referencePrice: {$ref: '#/components/schemas/Money'}
+        currency: {$ref: '#/components/schemas/Currency'}
+        weightGrams: {type: integer, minimum: 1, maximum: 100000, examples: [1000]}
+        allergens:
+          type: array
+          maxItems: 20
+          items: {type: string, minLength: 1, maxLength: 50}
+          examples: [[mleko]]
+        imageUrl: {type: string, format: uri, maxLength: 500}
+      additionalProperties: false
+    ProductOut:
+      type: object
+      required: [id, name, categoryId, categoryName, referencePrice, currency, weightGrams, allergens, imageUrl, status]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, maxLength: 100}
+        categoryId: {type: string, format: uuid}
+        categoryName: {type: string, maxLength: 60}
+        referencePrice: {$ref: '#/components/schemas/Money'}
+        currency: {$ref: '#/components/schemas/Currency'}
+        weightGrams: {type: integer}
+        allergens:
+          type: array
+          items: {type: string}
+        imageUrl: {type: string, format: uri}
+        status: {$ref: '#/components/schemas/ProductStatus'}
+      examples:
+        - id: c3a8f7d4-12ab-4e55-b6c9-5d0e8a1f2b73
+          name: Domače mleko 1 l
+          categoryId: 5b0e9a3c-2d14-4f7a-9c61-8e2f4a7b1d05
+          categoryName: Mleko
+          referencePrice: '1.80'
+          currency: EUR
+          weightGrams: 1000
+          allergens: [mleko]
+          imageUrl: https://example.com/mleko.jpg
+          status: ACTIVE
+    ProductList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ProductOut'}
+        total: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
