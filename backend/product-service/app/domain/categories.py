@@ -2,12 +2,12 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
-from app.repository.models import Category
+from app.repository.models import Category, Product
 
 
 def list_categories(
@@ -51,8 +51,14 @@ def replace_category(
 
 
 def delete_category(session: Session, category_id: UUID) -> None:
-    """Trajen izbris; ponovitev vrne 404."""
+    """Trajen izbris; ponovitev vrne 404.
+
+    Kategorije, ki jo uporablja izdelek (tudi arhiviran), ni mogoče izbrisati.
+    """
     category = get_category(session, category_id)
+    in_use = session.scalar(select(exists().where(Product.category_id == category_id)))
+    if in_use:
+        raise ApiError(409, "CATEGORY_IN_USE", "Category is used by a product.")
     session.delete(category)
     session.commit()
 

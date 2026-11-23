@@ -25,6 +25,7 @@ operator_or_frontend = [Depends(allowed_callers("gateway", operator=True))]
 
 NOT_FOUND = {404: "`CATEGORY_NOT_FOUND`."}
 NAME_TAKEN = {409: "`CATEGORY_NAME_TAKEN`: another category already has this name."}
+IN_USE = {409: "`CATEGORY_IN_USE`: a product (also archived) uses this category."}
 
 
 @router.get(
@@ -79,9 +80,9 @@ def replace_category(session: SessionDep, category_id: UUID, body: CategoryIn) -
     "/{category_id}",
     status_code=204,
     dependencies=operator_only,
-    responses=error_docs(NOT_FOUND),
+    responses=error_docs(NOT_FOUND | IN_USE),
     openapi_extra={"x-callers": ["OPERATOR"]},
 )
 def delete_category(session: SessionDep, category_id: UUID) -> None:
-    """Trajen izbris; ponovitev vrne 404."""
+    """Trajen izbris, samo če je ne uporablja noben izdelek; ponovitev vrne 404."""
     categories.delete_category(session, category_id)

@@ -18,6 +18,15 @@ def database_url() -> str:
     return os.environ["DATABASE_URL"]
 
 
+def own_service_token() -> str:
+    """Žeton, s katerim Product kliče druge storitve."""
+    return os.environ.get("PRODUCT_SERVICE_TOKEN", "")
+
+
+def sales_url() -> str:
+    return os.environ.get("SALES_URL", "http://sales-service:8000")
+
+
 def service_tokens() -> dict[str, str]:
     """Znani žetoni klicateljev; nenastavljen (prazen) žeton se ne upošteva."""
     tokens = {}
