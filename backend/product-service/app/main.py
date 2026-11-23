@@ -1,6 +1,5 @@
 """Product Service: katalog izdelkov in kategorije."""
 
-import os  # namerna napaka za ruff (F401: neuporabljen import), popravek v naslednjem commitu
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
