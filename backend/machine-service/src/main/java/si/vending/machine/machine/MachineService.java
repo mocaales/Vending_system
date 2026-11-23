@@ -17,8 +17,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import si.vending.machine.core.ApiException;
 import si.vending.machine.core.Page;
+import si.vending.machine.machine.MachineDtos.KeyCreated;
+import si.vending.machine.machine.MachineDtos.KeyIn;
+import si.vending.machine.machine.MachineDtos.KeyList;
+import si.vending.machine.machine.MachineDtos.KeyOut;
 import si.vending.machine.machine.MachineDtos.MachineCreate;
 import si.vending.machine.machine.MachineDtos.MachineCreated;
+import si.vending.machine.machine.MachineDtos.MachineKeyVerifyOut;
 import si.vending.machine.machine.MachineDtos.MachineOut;
 import si.vending.machine.machine.MachineDtos.MachineUpdate;
 
@@ -209,5 +214,67 @@ public class MachineService {
       machine.changeStatus(MachineStatus.RETIRED, now);
       keys.revokeAll(id, now);
     });
+  }
+
+  private static final int MAX_ACTIVE_KEYS = 3;
+
+  /** Issues a key; the machine row is locked so parallel requests cannot exceed the limit. */
+  @Transactional
+  public KeyCreated createKey(UUID machineId, KeyIn in) {
+    Machine machine = machines.findForUpdate(machineId).orElseThrow(MachineService::notFound);
+    if (machine.status() == MachineStatus.RETIRED) {
+      throw retired();
+    }
+    if (keys.countByMachineIdAndStatus(machineId, KeyStatus.ACTIVE) >= MAX_ACTIVE_KEYS) {
+      throw new ApiException(
+          HttpStatus.CONFLICT,
+          "KEY_LIMIT_REACHED",
+          "A machine can have at most " + MAX_ACTIVE_KEYS + " active keys.");
+    }
+    String secret = MachineKeys.generate();
+    MachineKey key =
+        new MachineKey(
+            UUID.randomUUID(),
+            machineId,
+            MachineKeys.hash(secret),
+            MachineKeys.hint(secret),
+            in == null ? null : in.label(),
+            now());
+    keys.save(key);
+    return KeyCreated.of(key, secret);
+  }
+
+  @Transactional(readOnly = true)
+  public KeyList listKeys(UUID machineId) {
+    if (!machines.existsById(machineId)) {
+      throw notFound();
+    }
+    return new KeyList(
+        keys.findByMachineIdOrderByCreatedAtAscIdAsc(machineId).stream().map(KeyOut::of).toList());
+  }
+
+  @Transactional
+  public void revokeKey(UUID machineId, UUID keyId) {
+    if (!machines.existsById(machineId)) {
+      throw notFound();
+    }
+    MachineKey key =
+        keys.findByIdAndMachineId(keyId, machineId)
+            .orElseThrow(
+                () -> new ApiException(HttpStatus.NOT_FOUND, "KEY_NOT_FOUND", "Key not found."));
+    key.revoke(now());
+  }
+
+  /** Resolves an active key of a non-retired machine; every failure looks the same. */
+  @Transactional(readOnly = true)
+  public MachineKeyVerifyOut verifyKey(String secret) {
+    return keys.findByKeyHash(MachineKeys.hash(secret))
+        .filter(k -> k.status() == KeyStatus.ACTIVE)
+        .flatMap(k -> machines.findById(k.machineId()))
+        .filter(m -> m.status() != MachineStatus.RETIRED)
+        .map(m -> new MachineKeyVerifyOut(m.id(), m.status()))
+        .orElseThrow(() ->
+            new ApiException(
+                HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Invalid or missing credentials."));
   }
 }

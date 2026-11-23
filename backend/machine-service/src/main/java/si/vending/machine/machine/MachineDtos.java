@@ -109,4 +109,55 @@ public final class MachineDtos {
           keyId);
     }
   }
+
+  /** Optional body of POST /keys. */
+  public record KeyIn(@Size(max = 60) @NoControlChars String label) {}
+
+  public record KeyOut(
+      UUID keyId,
+      String label,
+      String hint,
+      KeyStatus status,
+      Instant createdAt,
+      Instant revokedAt) {
+
+    static KeyOut of(MachineKey k) {
+      return new KeyOut(
+          k.id(), k.label(), k.hint().trim(), k.status(), k.createdAt(), k.revokedAt());
+    }
+  }
+
+  public record KeyList(List<KeyOut> items) {}
+
+  /** {@link KeyOut} plus the one-time secret. */
+  public record KeyCreated(
+      UUID keyId,
+      String label,
+      String hint,
+      KeyStatus status,
+      Instant createdAt,
+      Instant revokedAt,
+      String machineKey) {
+
+    /** The one-time machine key is left out so it never reaches logs. */
+    @Override
+    public String toString() {
+      return "KeyCreated[keyId=" + keyId + ", hint=" + hint + ", machineKey=***]";
+    }
+
+    static KeyCreated of(MachineKey k, String machineKey) {
+      return new KeyCreated(
+          k.id(), k.label(), k.hint().trim(), k.status(), k.createdAt(), k.revokedAt(), machineKey);
+    }
+  }
+
+  public record MachineKeyVerifyIn(@NotNull @Size(min = 1, max = 128) String machineKey) {
+
+    @Override
+    public String toString() {
+      return "MachineKeyVerifyIn[machineKey=***]";
+    }
+  }
+
+  public record MachineKeyVerifyOut(UUID machineId, MachineStatus status) {}
 }

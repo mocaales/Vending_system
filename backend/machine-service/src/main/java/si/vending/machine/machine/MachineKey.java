@@ -54,4 +54,36 @@ public class MachineKey {
   public UUID id() {
     return id;
   }
+
+  public UUID machineId() {
+    return machineId;
+  }
+
+  public String hint() {
+    return hint;
+  }
+
+  public String label() {
+    return label;
+  }
+
+  public KeyStatus status() {
+    return status;
+  }
+
+  public Instant createdAt() {
+    return createdAt;
+  }
+
+  public Instant revokedAt() {
+    return revokedAt;
+  }
+
+  /** Revokes the key; a key that is already revoked keeps its first revocation time. */
+  public void revoke(Instant now) {
+    if (status == KeyStatus.ACTIVE) {
+      status = KeyStatus.REVOKED;
+      revokedAt = now;
+    }
+  }
 }
