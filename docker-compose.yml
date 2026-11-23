@@ -159,6 +159,28 @@ services:
     mem_limit: 512m
     restart: unless-stopped
 
+  # Sales Service (Java). Kličeta ga gateway in product, sam kliče inventory, machine in product; zunaj omrežja Compose ni dosegljiv.
+  sales-service:
+    build: ./backend/sales-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://sales-db:5432/sales
+      SPRING_DATASOURCE_USERNAME: sales
+      SPRING_DATASOURCE_PASSWORD: ${SALES_DB_PASSWORD:?Nastavi SALES_DB_PASSWORD v .env}
+      GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN:?Nastavi GATEWAY_SERVICE_TOKEN v .env}
+      PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:?Nastavi PRODUCT_SERVICE_TOKEN v .env}
+      SALES_SERVICE_TOKEN: ${SALES_SERVICE_TOKEN:?Nastavi SALES_SERVICE_TOKEN v .env}
+    depends_on:
+      sales-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    mem_limit: 512m
+    restart: unless-stopped
+
   # ---------------------------------------------------------------------------
   # VZOREC (komentiran): blok komponente. Vsaka komponenta ga prekopira v svojem PR.
   # Pravila:
@@ -169,23 +191,6 @@ services:
   #  - preverjanje zdravja na /health/ready, komponenta posluša na vratih 8000 (samo znotraj omrežja);
   #  - gateway (8080) in frontend (5173) objavita vrata v svojih issueh.
   #
-  # sales-service:
-  #   build: ./backend/sales-service
-  #   environment:
-  #     SPRING_DATASOURCE_URL: jdbc:postgresql://sales-db:5432/sales
-  #     SPRING_DATASOURCE_USERNAME: sales
-  #     SPRING_DATASOURCE_PASSWORD: ${SALES_DB_PASSWORD:?Nastavi SALES_DB_PASSWORD v .env}
-  #     SALES_SERVICE_TOKEN: ${SALES_SERVICE_TOKEN:?Nastavi SALES_SERVICE_TOKEN v .env}
-  #   depends_on:
-  #     sales-db:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/ready"]
-  #     interval: 10s
-  #     timeout: 3s
-  #     retries: 10
-  #   mem_limit: 512m
-  #   restart: unless-stopped
   # ---------------------------------------------------------------------------
 
 volumes:
