@@ -592,7 +592,7 @@ Registracije ni. Prvega operaterja ob prvem zagonu ustvari gateway iz `BOOTSTRAP
 1. Web UI pošlje e-naslov in geslo na `POST /api/v1/auth/login`.
 2. Gateway preveri geslo in stanje računa ter vrne podpisan žeton (JWT, velja 8 ur). Neznan e-naslov, napačno geslo in deaktiviran račun dobijo enak odgovor 401.
 3. UI žeton hrani za čas zavihka in ga pošilja v glavi `Authorization`; ob 401 prikaže prijavo.
-4. Gateway ob vsaki operaterski zahtevi preveri žeton in ali je račun še aktiven, nato storitvi posreduje `X-Operator-Id`.
+4. Gateway ob vsaki operaterski zahtevi preveri žeton in ali je račun še aktiven, nato storitvi posreduje `X-Operator-Id` skupaj s svojim `X-Service-Token`.
 5. Odjava, sprememba lastnega gesla, administrativna ponastavitev gesla drugega operaterja (`PUT /api/v1/operators/{id}/password`) in deaktivacija računa takoj razveljavijo vse žetone tega računa. Operater ne more deaktivirati sebe; vsaj en aktiven račun vedno ostane.
 
 Frontend API kliče storitve vzporedno; vsak odsek pogleda ima `status` (`OK`, `STALE`, `UNAVAILABLE`) in `asOf`. Prazen seznam nikoli ne nadomesti nedosegljive storitve.
@@ -652,7 +652,7 @@ Odjava, sprememba gesla, ponastavitev gesla in deaktivacija povečajo `token_ver
 | Ključ avtomata (`X-Machine-Key`) | Machine ob ustvarjanju avtomata ali novem ključu, prikazan enkrat | gateway prek Machine; Sales in Monitoring preverita še `machineId` |
 | Notranji žeton (`X-Service-Token`) | po en za vsako komponento, ki kliče druge (šest), v okolju | klicana storitev; dovoljeni klicatelji po poti so v [03](03-api-pogodbe.md) |
 
-Gateway ločuje štiri razrede poti: prijava (5 neuspešnih poskusov v 15 minutah, nato 429), javne (`/api/v1/public/*`), naprave (`/api/v1/device/*`, ključ avtomata) in operaterske (`/api/v1/operator/*`, `/api/v1/auth/*`, `/api/v1/operators` ter prehodne poti, JWT). Glave `X-Operator-Id`, `X-Machine-Id` in `X-Service-Token` odjemalca gateway zavrže. Prehodne poti ne izpostavijo `decrease`, `POST /alerts`, notranjih poti ter zapisov meritev in prodaj. Vsaka komponenta pozna samo geslo svoje baze. Zunaj velja HTTPS, lokalno HTTP. Skrivnosti so samo v okolju, ne v kodi in ne v dnevnikih.
+Gateway ločuje štiri razrede poti: prijava (5 neuspešnih poskusov v 15 minutah, nato 429), javne (`/api/v1/public/*`), naprave (`/api/v1/device/*`, ključ avtomata) in operaterske (`/api/v1/operator/*`, `/api/v1/auth/*`, `/api/v1/operators` ter prehodne poti, JWT). Glave `X-Operator-Id`, `X-Machine-Id` in `X-Service-Token` odjemalca gateway zavrže. Prehodne poti ne izpostavijo `decrease`, `POST /alerts`, notranjih poti ter zapisov meritev in prodaj. Vsaka komponenta pozna samo geslo svoje baze. Zunaj velja HTTPS, lokalno HTTP. Skrivnosti so samo v okolju, ne v kodi in ne v dnevnikih. Notranji žetoni so skupni po klicatelju (en žeton na storitev), zato bi se storitev, ki pozna `GATEWAY_SERVICE_TOKEN`, lahko izdala za operaterja; sprejeto za obseg projekta, ker poslovne storitve niso dosegljive zunaj omrežja Compose. Umik avtomata preveri zalogo v Inventory pred zapisom, zato lahko sočasna polnitev med preverjanjem in umikom pusti zalogo na umaknjenem avtomatu (znana medstoritvena tekma, sprejeto).
 
 ## 8. Skupne konvencije
 

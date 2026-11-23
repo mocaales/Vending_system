@@ -8,7 +8,7 @@ Referenca končnih točk. Izhodišče za obseg: [skupina_10.pdf](skupina_10.pdf)
 |---|---|
 | Poti | storitve `/v1/...`; gateway `/api/v1/...` (pot storitve z dodano predpono `/api`). Tabele spodaj navajajo pot storitve; drugačna pot gatewaya je v opombi. |
 | Kdo kliče | `OPERATOR` (JWT gatewaya), `MACHINE` (`X-Machine-Key`), `PUBLIC` (brez prijave), ali ime storitve (`X-Service-Token`); `frontend-api` je modul gatewaya in uporablja `GATEWAY_SERVICE_TOKEN` |
-| Glave | `X-Trace-Id` povsod; `Authorization: Bearer <accessToken>` za `OPERATOR`; gateway doda `X-Operator-Id` ali `X-Machine-Id` in odstrani enake glave odjemalca |
+| Glave | `X-Trace-Id` povsod; `Authorization: Bearer <accessToken>` za `OPERATOR`; gateway doda `X-Operator-Id` ali `X-Machine-Id` in odstrani enake glave odjemalca; operaterski klic storitvi gre vedno skupaj z gatewayevim `X-Service-Token` (`X-Operator-Id` brez njega zavrne 401, s tujim žetonom storitev pa 403 `CALLER_NOT_ALLOWED`) |
 | Tipi | ID-ji so UUID, `slotCode` je niz (npr. `"A1"`); denar in temperature decimalni niz (`"2.50"`); časi ISO-8601 UTC s `Z`; datumi `YYYY-MM-DD` (UTC; `expiryDate` je lokalni datum Europe/Ljubljana, [01 §6.4](01-arhitektura.md#64-predal-in-polnitev)); enumi `UPPER_SNAKE` |
 | Zahteve | neznana polja: 422; omejitve polj so navedene samo pri modelu |
 | Seznami | `limit` (privzeto 50, največ 200), `offset`; odgovor `{items, total, limit, offset}` |
