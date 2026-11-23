@@ -31,11 +31,14 @@ class OpenApiContractTest extends AbstractApiTest {
     }
   }
 
-  /** Machine keys and the internal verify route belong to issue #18, not #17. */
+  /** Machines (#17), machine keys and the internal verify route (#18). */
   private static boolean inScope(String path) {
     return path.equals("/v1/machines")
         || path.equals("/v1/machines/{id}")
-        || path.equals("/v1/machines/{id}/status");
+        || path.equals("/v1/machines/{id}/status")
+        || path.equals("/v1/machines/{id}/keys")
+        || path.equals("/v1/machines/{id}/keys/{keyId}")
+        || path.equals("/v1/internal/machine-keys/verify");
   }
 
   @SuppressWarnings("unchecked")

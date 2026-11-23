@@ -1,6 +1,8 @@
 package si.vending.machine.machine;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -16,4 +18,12 @@ public interface MachineKeyRepository extends JpaRepository<MachineKey, UUID> {
           + " k.revokedAt = :now where k.machineId = :machineId"
           + " and k.status = si.vending.machine.machine.KeyStatus.ACTIVE")
   int revokeAll(@Param("machineId") UUID machineId, @Param("now") Instant now);
+
+  Optional<MachineKey> findByKeyHash(String keyHash);
+
+  Optional<MachineKey> findByIdAndMachineId(UUID id, UUID machineId);
+
+  List<MachineKey> findByMachineIdOrderByCreatedAtAscIdAsc(UUID machineId);
+
+  long countByMachineIdAndStatus(UUID machineId, KeyStatus status);
 }

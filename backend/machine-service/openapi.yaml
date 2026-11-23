@@ -564,7 +564,7 @@ components:
       type: object
       required: [machineKey]
       properties:
-        machineKey: {type: string, minLength: 1}
+        machineKey: {type: string, minLength: 1, maxLength: 128}
       additionalProperties: false
     MachineKeyVerifyOut:
       type: object
