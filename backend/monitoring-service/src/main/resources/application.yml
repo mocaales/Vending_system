@@ -1,0 +1,44 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: monitoring-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:}
+    username: ${SPRING_DATASOURCE_USERNAME:}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 3000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  web:
+    resources:
+      add-mappings: false
+
+springdoc:
+  api-docs:
+    path: /openapi.json
+  swagger-ui:
+    enabled: false
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+
+core:
+  service-tokens:
+    gateway: ${GATEWAY_SERVICE_TOKEN:}
+    monitoring: ${MONITORING_SERVICE_TOKEN:}
+    sales: ${SALES_SERVICE_TOKEN:}
+    inventory: ${INVENTORY_SERVICE_TOKEN:}
+    product: ${PRODUCT_SERVICE_TOKEN:}
