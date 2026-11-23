@@ -1,0 +1,75 @@
+package si.vending.machine.machine;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
+import si.vending.machine.core.support.AbstractApiTest;
+
+/**
+ * #17 criterion 6: the committed {@code openapi.yaml} equals the runtime {@code /openapi.json}.
+ *
+ * <p>Springdoc cannot reproduce the hand-written YAML byte for byte (descriptions, {@code
+ * x-callers}), so this compares the structure that clients depend on: operations (method + path),
+ * their {@code operationId}s and their documented response codes.
+ */
+class OpenApiContractTest extends AbstractApiTest {
+
+  private static final Set<String> METHODS = Set.of("get", "put", "post", "delete");
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> committed() throws IOException {
+    try (Reader reader = Files.newBufferedReader(Path.of("openapi.yaml"))) {
+      return new Yaml().load(reader);
+    }
+  }
+
+  /** Machine keys and the internal verify route belong to issue #18, not #17. */
+  private static boolean inScope(String path) {
+    return path.equals("/v1/machines")
+        || path.equals("/v1/machines/{id}")
+        || path.equals("/v1/machines/{id}/status");
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Set<String> operations(Map<String, Object> spec, boolean withDetails) {
+    Set<String> result = new TreeSet<>();
+    Map<String, Map<String, Object>> paths = (Map<String, Map<String, Object>>) spec.get("paths");
+    paths.entrySet().removeIf(e -> !inScope(e.getKey()));
+    paths.forEach((path, item) ->
+        item.forEach((method, operation) -> {
+          if (!METHODS.contains(method)) {
+            return;
+          }
+          Map<String, Object> op = (Map<String, Object>) operation;
+          String line = method.toUpperCase() + " " + path;
+          if (withDetails) {
+            Map<String, Object> responses = (Map<String, Object>) op.get("responses");
+            line += " " + op.get("operationId") + " " + new TreeSet<>(responses.keySet());
+          }
+          result.add(line);
+        }));
+    return result;
+  }
+
+  @Test
+  void runtimeSpecHasTheSameOperationsAsTheCommittedFile() throws IOException {
+    Map<String, Object> runtime = get("/openapi.json").json();
+
+    assertThat(operations(runtime, false)).isEqualTo(operations(committed(), false));
+  }
+
+  @Test
+  void runtimeSpecHasTheSameOperationIdsAndResponseCodes() throws IOException {
+    Map<String, Object> runtime = get("/openapi.json").json();
+
+    assertThat(operations(runtime, true)).isEqualTo(operations(committed(), true));
+  }
+}
