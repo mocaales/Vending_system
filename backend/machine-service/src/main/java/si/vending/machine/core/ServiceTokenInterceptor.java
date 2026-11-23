@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.method.HandlerMethod;
@@ -13,6 +14,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 /** Enforces {@link AllowedCallers}: identifies the caller by {@code X-Service-Token}. */
 public class ServiceTokenInterceptor implements HandlerInterceptor {
+
+  public static final String OPERATOR_HEADER = "X-Operator-Id";
+  private static final String GATEWAY = "gateway";
 
   private final Map<String, String> tokens;
 
@@ -36,15 +40,38 @@ public class ServiceTokenInterceptor implements HandlerInterceptor {
       return true;
     }
     String caller = identify(request.getHeader("X-Service-Token"));
+    String operatorId = request.getHeader(OPERATOR_HEADER);
+    boolean operatorPresent = operatorId != null && !operatorId.isBlank();
     if (caller == null) {
       throw new ApiException(
           HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Missing or invalid service token.");
+    }
+    if (GATEWAY.equals(caller) && operatorPresent) {
+      if (!isOperator(operatorId)) {
+        throw new ApiException(
+            HttpStatus.UNAUTHORIZED, "UNAUTHENTICATED", "Invalid operator identity.");
+      }
+      if (allowed.operator()) {
+        return true;
+      }
     }
     if (!Arrays.asList(allowed.value()).contains(caller)) {
       throw new ApiException(
           HttpStatus.FORBIDDEN, "CALLER_NOT_ALLOWED", "Caller is not allowed to use this route.");
     }
     return true;
+  }
+
+  private static boolean isOperator(String operatorId) {
+    if (operatorId == null || operatorId.isBlank()) {
+      return false;
+    }
+    try {
+      UUID.fromString(operatorId);
+      return true;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
   }
 
   private String identify(String presented) {
