@@ -1,0 +1,1 @@
+-- Začetna prazna migracija sales-service; sheme dodajo poslovni issueji.
