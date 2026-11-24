@@ -99,18 +99,28 @@ public final class SaleDtos {
     Class<?>[] groups() default {};
 
     Class<? extends Payload>[] payload() default {};
+
+    /** True for the closing note: empty and whitespace-only text are accepted. */
+    boolean allowBlank() default false;
   }
 
   /** Length in code points, no lone surrogates, not blank, no refused characters. */
   public static final class ReconciliationNoteValidator
       implements ConstraintValidator<ReconciliationNote, String> {
+    private boolean allowBlank;
+
+    @Override
+    public void initialize(ReconciliationNote annotation) {
+      this.allowBlank = annotation.allowBlank();
+    }
+
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
       if (value == null) {
         return true;
       }
       int count = value.codePointCount(0, value.length());
-      if (count < 1 || count > 500) {
+      if (count < (allowBlank ? 0 : 1) || count > 500) {
         return false;
       }
       boolean blank = true;
@@ -124,7 +134,7 @@ public final class SaleDtos {
         }
         i += Character.charCount(cp);
       }
-      return !blank && NOTE_REGEX.matcher(value).matches();
+      return (allowBlank || !blank) && NOTE_REGEX.matcher(value).matches();
     }
   }
 
