@@ -35,7 +35,7 @@ logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
 
-inventory:
+inventory-client:
   base-url: ${INVENTORY_URL:http://inventory-service:8000}
   service-token: ${MACHINE_SERVICE_TOKEN:}
 

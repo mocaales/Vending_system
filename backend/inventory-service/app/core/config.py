@@ -23,6 +23,14 @@ def own_service_token() -> str:
     return os.environ.get("INVENTORY_SERVICE_TOKEN", "")
 
 
+def machine_url() -> str:
+    return os.environ.get("MACHINE_URL", "http://machine-service:8000")
+
+
+def product_url() -> str:
+    return os.environ.get("PRODUCT_URL", "http://product-service:8000")
+
+
 def service_tokens() -> dict[str, str]:
     """Znani žetoni klicateljev; nenastavljen (prazen) žeton se ne upošteva."""
     tokens = {}

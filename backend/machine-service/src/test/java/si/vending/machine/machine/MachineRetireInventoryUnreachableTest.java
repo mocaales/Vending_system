@@ -16,7 +16,7 @@ class MachineRetireInventoryUnreachableTest extends AbstractApiTest {
 
   @DynamicPropertySource
   static void unreachableInventory(DynamicPropertyRegistry registry) {
-    registry.add("inventory.base-url", () -> "http://localhost:" + closedPort());
+    registry.add("inventory-client.base-url", () -> "http://localhost:" + closedPort());
   }
 
   private static int closedPort() {

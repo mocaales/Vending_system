@@ -13,10 +13,10 @@ import si.vending.machine.core.support.Http;
  * Base for the machine CRUD tests (issue #17). Starts the {@link InventoryStub} and points the
  * service at it.
  *
- * <p>Assumed configuration contract: property {@code inventory.base-url} holds the Inventory base
- * URL (docker-compose sets it from {@code INVENTORY_URL}). An operator request carries BOTH the
- * gateway {@code X-Service-Token} and the {@code X-Operator-Id} set by the gateway; other services
- * use only {@code X-Service-Token} as in the core tests.
+ * <p>Assumed configuration contract: property {@code inventory-client.base-url} holds the Inventory
+ * base URL (docker-compose sets it from {@code INVENTORY_URL}). An operator request carries BOTH
+ * the gateway {@code X-Service-Token} and the {@code X-Operator-Id} set by the gateway; other
+ * services use only {@code X-Service-Token} as in the core tests.
  */
 public abstract class MachineApiTest extends AbstractApiTest {
 
@@ -27,7 +27,7 @@ public abstract class MachineApiTest extends AbstractApiTest {
 
   @DynamicPropertySource
   static void machineProperties(DynamicPropertyRegistry registry) {
-    registry.add("inventory.base-url", INVENTORY::baseUrl);
+    registry.add("inventory-client.base-url", INVENTORY::baseUrl);
     registry.add("core.service-tokens.monitoring", () -> MONITORING_TOKEN);
     registry.add("core.service-tokens.sales", () -> SALES_TOKEN);
   }
