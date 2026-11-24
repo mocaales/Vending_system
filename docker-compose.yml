@@ -207,6 +207,29 @@ services:
     mem_limit: 256m
     restart: unless-stopped
 
+  # Inventory Service (Python). Kličejo ga gateway, machine, sales in monitoring; zunaj omrežja Compose ni dosegljiv.
+  inventory-service:
+    build: ./backend/inventory-service
+    environment:
+      DATABASE_URL: postgresql+psycopg://inventory:${INVENTORY_DB_PASSWORD:?Nastavi INVENTORY_DB_PASSWORD v .env}@inventory-db:5432/inventory
+      GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN:?Nastavi GATEWAY_SERVICE_TOKEN v .env}
+      MACHINE_SERVICE_TOKEN: ${MACHINE_SERVICE_TOKEN:?Nastavi MACHINE_SERVICE_TOKEN v .env}
+      SALES_SERVICE_TOKEN: ${SALES_SERVICE_TOKEN:?Nastavi SALES_SERVICE_TOKEN v .env}
+      MONITORING_SERVICE_TOKEN: ${MONITORING_SERVICE_TOKEN:?Nastavi MONITORING_SERVICE_TOKEN v .env}
+      INVENTORY_SERVICE_TOKEN: ${INVENTORY_SERVICE_TOKEN:?Nastavi INVENTORY_SERVICE_TOKEN v .env}
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+    # 127.0.0.1 namesto localhost: uvicorn posluša na IPv4, localhost v alpine kaže na IPv6.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    mem_limit: 256m
+    restart: unless-stopped
+
   # ---------------------------------------------------------------------------
   # VZOREC (komentiran): blok komponente. Vsaka komponenta ga prekopira v svojem PR.
   # Pravila:
