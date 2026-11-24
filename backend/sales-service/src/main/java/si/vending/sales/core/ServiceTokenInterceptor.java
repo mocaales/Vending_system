@@ -88,13 +88,24 @@ public class ServiceTokenInterceptor implements HandlerInterceptor {
     }
     UUID operator = single(operators);
     UUID machine = single(machines);
-    if (operator != null && allowed.operator()) {
-      return new CallerIdentity(GATEWAY, CallerIdentity.Kind.OPERATOR, operator);
+    if (operator != null) {
+      return new CallerIdentity(
+          GATEWAY, CallerIdentity.Kind.OPERATOR, requireKind(operator, allowed.operator()));
     }
-    if (machine != null && allowed.machine()) {
-      return new CallerIdentity(GATEWAY, CallerIdentity.Kind.MACHINE, machine);
+    if (machine != null) {
+      return new CallerIdentity(
+          GATEWAY, CallerIdentity.Kind.MACHINE, requireKind(machine, allowed.machine()));
     }
     return null;
+  }
+
+  /** The id if the route accepts this kind of identity; 403 otherwise, never a fallback. */
+  private static UUID requireKind(UUID id, boolean accepted) {
+    if (!accepted) {
+      throw new ApiException(
+          HttpStatus.FORBIDDEN, "CALLER_NOT_ALLOWED", "Caller is not allowed to use this route.");
+    }
+    return id;
   }
 
   /** Every value of a header: one entry per header line, and per comma part if {@code split}. */
