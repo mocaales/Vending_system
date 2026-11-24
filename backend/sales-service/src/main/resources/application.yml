@@ -50,3 +50,12 @@ core:
     sales: ${SALES_SERVICE_TOKEN:}
     inventory: ${INVENTORY_SERVICE_TOKEN:}
     product: ${PRODUCT_SERVICE_TOKEN:}
+
+outbox:
+  scheduler-enabled: true
+  poll-interval: PT1S
+  initial-backoff: PT5S
+  max-backoff: PT5M
+  batch-size: 100
+  lease: PT30S
+  alert-attempts: 12

@@ -5,16 +5,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 import si.vending.sales.core.ApiException;
+import si.vending.sales.core.TraceIdFilter;
 import si.vending.sales.sales.SaleDtos.SaleEvent;
 import si.vending.sales.sales.SaleDtos.SaleOut;
 
 /**
  * Sale intake. Not transactional as a whole: Product and Inventory are called outside any database
- * transaction, and the single INSERT ... ON CONFLICT DO NOTHING decides who stored a {@code saleId}
- * first.
+ * transaction. The INSERT ... ON CONFLICT DO NOTHING decides who stored a {@code saleId} first and
+ * runs in one transaction with the outbox entry of the stock decrease.
  */
 @Service
 public class SaleService {
@@ -27,9 +30,18 @@ public class SaleService {
   private final SaleRepository repository;
   private final ProductClient products;
   private final InventoryClient inventory;
+  private final OutboxRepository outbox;
+  private final TransactionTemplate tx;
 
-  public SaleService(SaleRepository repository, ProductClient products, InventoryClient inventory) {
+  public SaleService(
+      SaleRepository repository,
+      ProductClient products,
+      InventoryClient inventory,
+      OutboxRepository outbox,
+      TransactionTemplate tx) {
     this.repository = repository;
+    this.outbox = outbox;
+    this.tx = tx;
     this.products = products;
     this.inventory = inventory;
   }
@@ -56,20 +68,29 @@ public class SaleService {
       throw new ApiException(
           HttpStatus.UNPROCESSABLE_ENTITY, "REFERENCE_NOT_FOUND", "Unknown slot.");
     }
-    int inserted =
-        repository.insertIfAbsent(
-            event.saleId(),
-            event.machineId(),
-            event.slotId(),
-            event.productId(),
-            event.quantity(),
-            new BigDecimal(event.unitPricePaid()),
-            event.currency(),
-            event.paymentMethod().name(),
-            occurredAt,
-            now.truncatedTo(ChronoUnit.MICROS));
+    String traceId = MDC.get(TraceIdFilter.MDC_KEY);
+    // The sale and its outbox entry are one unit: both rows or neither.
+    Integer inserted =
+        tx.execute(status -> {
+          int n =
+              repository.insertIfAbsent(
+                  event.saleId(),
+                  event.machineId(),
+                  event.slotId(),
+                  event.productId(),
+                  event.quantity(),
+                  new BigDecimal(event.unitPricePaid()),
+                  event.currency(),
+                  event.paymentMethod().name(),
+                  occurredAt,
+                  now.truncatedTo(ChronoUnit.MICROS));
+          if (n == 1) {
+            outbox.insert(event.saleId(), traceId);
+          }
+          return n;
+        });
     Sale stored = repository.findById(event.saleId()).orElseThrow();
-    if (inserted == 1) {
+    if (inserted != null && inserted == 1) {
       return new Recorded(SaleOut.of(stored), true);
     }
     return replay(stored, event); // another request stored the same saleId first
