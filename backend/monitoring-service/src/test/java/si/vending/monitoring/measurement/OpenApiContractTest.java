@@ -15,8 +15,8 @@ import si.vending.monitoring.core.support.AbstractApiTest;
 
 /**
  * #23 criterion: the committed {@code openapi.yaml} equals the runtime {@code /openapi.json} for
- * the measurement and status operations (method + path, {@code operationId}, documented response
- * codes). Later issues extend {@link #inScope}.
+ * the measurement, status and threshold operations (method + path, {@code operationId}, documented
+ * response codes). Later issues extend {@link #inScope}.
  */
 class OpenApiContractTest extends AbstractApiTest {
 
@@ -32,7 +32,8 @@ class OpenApiContractTest extends AbstractApiTest {
   private static boolean inScope(String path) {
     return path.equals("/v1/measurements")
         || path.equals("/v1/measurements/{machineId}")
-        || path.equals("/v1/monitoring/{machineId}/status");
+        || path.equals("/v1/monitoring/{machineId}/status")
+        || path.equals("/v1/thresholds/{machineId}");
   }
 
   @SuppressWarnings("unchecked")
@@ -57,10 +58,11 @@ class OpenApiContractTest extends AbstractApiTest {
   }
 
   @Test
-  void runtimeSpecHasAllFourMeasurementOperationsOfTheCommittedFile() throws IOException {
+  void runtimeSpecHasAllMeasurementStatusAndThresholdOperationsOfTheCommittedFile()
+      throws IOException {
     Map<String, Object> runtime = get("/openapi.json").json();
 
-    assertThat(operations(committed(), false)).hasSize(4);
+    assertThat(operations(committed(), false)).hasSize(7);
     assertThat(operations(runtime, false)).isEqualTo(operations(committed(), false));
   }
 

@@ -88,6 +88,11 @@ public class ServiceTokenInterceptor implements HandlerInterceptor {
     }
     UUID operator = single(operators);
     UUID machine = single(machines);
+    if ((operator != null && !allowed.operator()) || (machine != null && !allowed.machine())) {
+      // an identity of a kind the route does not accept is never downgraded to the bare gateway
+      throw new ApiException(
+          HttpStatus.FORBIDDEN, "CALLER_NOT_ALLOWED", "Caller is not allowed to use this route.");
+    }
     if (operator != null && allowed.operator()) {
       return new CallerIdentity(GATEWAY, CallerIdentity.Kind.OPERATOR, operator);
     }

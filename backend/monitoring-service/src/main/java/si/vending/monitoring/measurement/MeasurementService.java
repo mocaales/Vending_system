@@ -32,6 +32,9 @@ public class MeasurementService {
    */
   public static final Instant EARLIEST_INSTANT = Instant.parse("2020-01-01T00:00:00Z");
 
+  /** No instant after this is accepted as a list from/to bound. */
+  public static final Instant LATEST_INSTANT = Instant.parse("2100-01-01T00:00:00Z");
+
   /** Result of an ingest: the stored measurement and whether this call created it. */
   public record Ingested(MeasurementOut measurement, boolean created) {}
 
@@ -98,6 +101,8 @@ public class MeasurementService {
       UUID machineId, Instant from, Instant to, int limit, int offset) {
     requireNotTooEarly("from", from);
     requireNotTooEarly("to", to);
+    requireNotTooLate("from", from);
+    requireNotTooLate("to", to);
     requireMachine(machineId);
     Instant end = to != null ? to : Instant.now();
     Instant start = from != null ? from : end.minus(DEFAULT_WINDOW);
@@ -150,6 +155,12 @@ public class MeasurementService {
   private static void requireNotTooEarly(String field, Instant value) {
     if (value != null && value.isBefore(EARLIEST_INSTANT)) {
       throw ApiException.invalidField(field, "must not be before " + EARLIEST_INSTANT + ".");
+    }
+  }
+
+  private static void requireNotTooLate(String field, Instant value) {
+    if (value != null && value.isAfter(LATEST_INSTANT)) {
+      throw ApiException.invalidField(field, "must not be after " + LATEST_INSTANT + ".");
     }
   }
 

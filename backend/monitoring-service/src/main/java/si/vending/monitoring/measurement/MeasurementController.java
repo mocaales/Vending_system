@@ -75,7 +75,7 @@ public class MeasurementController {
       description = "VALIDATION_ERROR",
       content = @Content(schema = @Schema(implementation = ApiError.class)))
   @AllowedCallers(
-      value = {},
+      value = {"gateway"},
       operator = true)
   @GetMapping("/measurements/{machineId}")
   public Page<MeasurementOut> list(
@@ -84,7 +84,7 @@ public class MeasurementController {
       @RequestParam(required = false) Instant to,
       @Valid PageParams page,
       HttpServletRequest request) {
-    CallerIdentity.require(request, CallerIdentity.Kind.OPERATOR);
+    requireOperatorOrFrontendApi(request);
     return service.list(machineId, from, to, page.limit(), page.offset());
   }
 
@@ -95,11 +95,11 @@ public class MeasurementController {
       description = "MACHINE_NOT_FOUND",
       content = @Content(schema = @Schema(implementation = ApiError.class)))
   @AllowedCallers(
-      value = {},
+      value = {"gateway"},
       operator = true)
   @GetMapping("/monitoring/{machineId}/status")
   public MachineMonitoringStatus status(@PathVariable UUID machineId, HttpServletRequest request) {
-    CallerIdentity.require(request, CallerIdentity.Kind.OPERATOR);
+    requireOperatorOrFrontendApi(request);
     return service.status(machineId);
   }
 
@@ -123,5 +123,15 @@ public class MeasurementController {
       HttpServletRequest request) {
     CallerIdentity.require(request, CallerIdentity.Kind.OPERATOR);
     return service.purge(machineId, before);
+  }
+
+  /** Operators, or the gateway's own token without identity (frontend-api, docs/03 section 5). */
+  private static void requireOperatorOrFrontendApi(HttpServletRequest request) {
+    if (request.getAttribute(CallerIdentity.ATTRIBUTE) instanceof CallerIdentity identity
+        && identity.kind() == CallerIdentity.Kind.SERVICE
+        && "gateway".equals(identity.service())) {
+      return;
+    }
+    CallerIdentity.require(request, CallerIdentity.Kind.OPERATOR);
   }
 }

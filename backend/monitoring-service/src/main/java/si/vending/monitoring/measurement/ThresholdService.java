@@ -2,10 +2,11 @@ package si.vending.monitoring.measurement;
 
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import si.vending.monitoring.threshold.ThresholdRepository;
 
 /**
- * The one place that answers "which thresholds apply to this machine". Today every machine uses the
- * defaults (docs/03 section 6); issue #24 replaces the body with a lookup of stored thresholds.
+ * The one place that answers "which thresholds apply to this machine": the stored ones, else the
+ * defaults of docs/03 section 6.
  */
 @Service
 public class ThresholdService {
@@ -18,9 +19,15 @@ public class ThresholdService {
       int doorOpenMaxSeconds,
       int noDataMaxSeconds) {}
 
-  static final Thresholds DEFAULTS = new Thresholds("8.0", "7.0", 2, 120, 300);
+  public static final Thresholds DEFAULTS = new Thresholds("8.0", "7.0", 2, 120, 300);
+
+  private final ThresholdRepository repository;
+
+  public ThresholdService(ThresholdRepository repository) {
+    this.repository = repository;
+  }
 
   public Thresholds forMachine(UUID machineId) {
-    return DEFAULTS;
+    return repository.find(machineId).orElse(DEFAULTS);
   }
 }
