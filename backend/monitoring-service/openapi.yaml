@@ -82,7 +82,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
         '422':
-          description: '`VALIDATION_ERROR` (with `details`), `REFERENCE_NOT_FOUND` (unknown machine) or `TIMESTAMP_OUT_OF_RANGE` (`observedAt` more than 5 minutes in the future).'
+          description: '`VALIDATION_ERROR` (with `details`, also for `observedAt` before 2020-01-01T00:00:00Z), `REFERENCE_NOT_FOUND` (unknown machine) or `TIMESTAMP_OUT_OF_RANGE` (`observedAt` more than 5 minutes in the future).'
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -99,8 +99,9 @@ paths:
       summary: List measurements of a machine
       description: |
         Ordered by `observedAt` ascending. The window `from`..`to` is at most 7 days; by default
-        it is the last 24 hours (`to` = now, `from` = `to` minus 24 h). A larger window or
-        `from` after `to` returns 422 `VALIDATION_ERROR`.
+        it is the last 24 hours (`to` = now, `from` = `to` minus 24 h). A larger window,
+        `from` after `to`, or `from`/`to` before 2020-01-01T00:00:00Z returns 422
+        `VALIDATION_ERROR`.
       x-callers: [OPERATOR, frontend-api]
       security:
         - OperatorId: []
@@ -108,11 +109,11 @@ paths:
       parameters:
         - name: from
           in: query
-          description: Start of the window (inclusive).
+          description: Start of the window (inclusive); not before 2020-01-01T00:00:00Z.
           schema: {type: string, format: date-time}
         - name: to
           in: query
-          description: End of the window (exclusive).
+          description: End of the window (exclusive); not before 2020-01-01T00:00:00Z.
           schema: {type: string, format: date-time}
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
@@ -142,7 +143,7 @@ paths:
         - name: before
           in: query
           required: true
-          description: Delete measurements observed strictly before this instant; must be more than 7 days in the past.
+          description: Delete measurements observed strictly before this instant; must be more than 7 days in the past and not before 2020-01-01T00:00:00Z.
           schema: {type: string, format: date-time}
       responses:
         '200':
@@ -155,7 +156,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/MachineNotFound'}
         '422':
-          description: '`VALIDATION_ERROR`: `before` is missing or not older than 7 days.'
+          description: '`VALIDATION_ERROR`: `before` is missing, not older than 7 days, or before 2020-01-01T00:00:00Z.'
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -566,7 +567,7 @@ components:
         observedAt:
           type: string
           format: date-time
-          description: UTC; at most 5 minutes in the future.
+          description: UTC; not before 2020-01-01T00:00:00Z and at most 5 minutes in the future.
         temperatureC:
           $ref: '#/components/schemas/DecimalString'
         doorState:

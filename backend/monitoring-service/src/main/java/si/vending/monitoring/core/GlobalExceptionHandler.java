@@ -30,7 +30,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(ApiException.class)
   ResponseEntity<Object> handleApi(ApiException e) {
-    return respond(e.status(), e.code(), e.getMessage(), null);
+    return respond(e.status(), e.code(), e.getMessage(), e.details());
   }
 
   @ExceptionHandler(Exception.class)

@@ -149,6 +149,7 @@ services:
       GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN:?Nastavi GATEWAY_SERVICE_TOKEN v .env}
       INVENTORY_SERVICE_TOKEN: ${INVENTORY_SERVICE_TOKEN:?Nastavi INVENTORY_SERVICE_TOKEN v .env}
       MONITORING_SERVICE_TOKEN: ${MONITORING_SERVICE_TOKEN:?Nastavi MONITORING_SERVICE_TOKEN v .env}
+      MACHINE_URL: http://machine-service:8000
     depends_on:
       monitoring-db:
         condition: service_healthy

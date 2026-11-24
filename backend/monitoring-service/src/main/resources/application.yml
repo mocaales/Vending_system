@@ -35,6 +35,9 @@ logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
 
+machine:
+  base-url: ${MACHINE_URL:http://localhost:8001}
+
 core:
   service-tokens:
     gateway: ${GATEWAY_SERVICE_TOKEN:}
