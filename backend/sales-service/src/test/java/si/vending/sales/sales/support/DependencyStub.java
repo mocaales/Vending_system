@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 
@@ -24,6 +25,11 @@ import java.util.concurrent.Executors;
  *   <li>Inventory {@code GET /v1/inventory/{machineId}/{slot}}: 200 {@code SlotStock}; an emptied
  *       slot is returned with {@code productId: null, quantity: 0}; a slot never set: 404 {@code
  *       SLOT_NOT_FOUND}.
+ *   <li>Inventory {@code POST /v1/inventory/{machineId}/{slot}/decrease} (issue #32): body {@code
+ *       DecreaseIn {saleId, productId, quantity}}; 201 {@code DecreaseOut {result, reason?,
+ *       quantityAfter}}, 200 with the stored result on a repeat, 404 {@code SLOT_NOT_FOUND}, 409
+ *       {@code SALE_ID_CONFLICT}, 422 {@code VALIDATION_ERROR}. The answers are scripted with
+ *       {@link #scriptDecrease}; without a script the stub answers 201 APPLIED.
  * </ul>
  */
 public final class DependencyStub {
@@ -37,7 +43,47 @@ public final class DependencyStub {
     UNAVAILABLE
   }
 
-  public record Call(String method, String path, String traceId, String serviceToken) {}
+  public record Call(
+      String method, String path, String traceId, String serviceToken, String body) {}
+
+  /**
+   * One scripted answer of the decrease endpoint; {@code drop} closes the connection unanswered.
+   */
+  public record Reply(int status, String body, boolean drop) {
+
+    public static Reply applied() {
+      return new Reply(201, decreaseOut("APPLIED", null, 7), false);
+    }
+
+    /** 200 with the stored result of an earlier identical request. */
+    public static Reply repeatApplied() {
+      return new Reply(200, decreaseOut("APPLIED", null, 7), false);
+    }
+
+    public static Reply needsReconciliation(String reason) {
+      return new Reply(201, decreaseOut("NEEDS_RECONCILIATION", reason, 0), false);
+    }
+
+    public static Reply repeatNeedsReconciliation(String reason) {
+      return new Reply(200, decreaseOut("NEEDS_RECONCILIATION", reason, 0), false);
+    }
+
+    public static Reply error(int status, String code) {
+      return new Reply(
+          status,
+          "{\"code\":\"" + code + "\",\"message\":\"scripted\",\"traceId\":\"stub\"}",
+          false);
+    }
+
+    public static Reply dropConnection() {
+      return new Reply(0, "", true);
+    }
+
+    private static String decreaseOut(String result, String reason, int quantityAfter) {
+      return "{\"result\":\"%s\",\"reason\":%s,\"quantityAfter\":%d}"
+          .formatted(result, reason == null ? "null" : "\"" + reason + "\"", quantityAfter);
+    }
+  }
 
   private final HttpServer server;
   private final String name;
@@ -45,6 +91,7 @@ public final class DependencyStub {
   private volatile Mode mode = Mode.NORMAL;
   private volatile String errorBody;
   private final List<Call> calls = new CopyOnWriteArrayList<>();
+  private final ConcurrentLinkedQueue<Reply> decreaseScript = new ConcurrentLinkedQueue<>();
 
   private DependencyStub(HttpServer server, String name) {
     this.server = server;
@@ -77,6 +124,7 @@ public final class DependencyStub {
     mode = Mode.NORMAL;
     errorBody = null;
     calls.clear();
+    decreaseScript.clear();
   }
 
   /** Replaces the body of the 500 answer (to prove that a client never logs a dependency body). */
@@ -87,6 +135,25 @@ public final class DependencyStub {
   /** Registers the 200 body for an exact request path. Unregistered paths answer 404. */
   public void register(String path, String json) {
     bodies.put(path, json);
+  }
+
+  /**
+   * Queues the answers of the next decrease requests, one per request; then back to 201 APPLIED.
+   */
+  public void scriptDecrease(Reply... replies) {
+    decreaseScript.addAll(List.of(replies));
+  }
+
+  /** Every {@code POST .../decrease} received, in arrival order. */
+  public List<Call> decreaseCalls() {
+    return calls.stream()
+        .filter(c -> c.method().equals("POST") && c.path().endsWith("/decrease"))
+        .toList();
+  }
+
+  /** The decrease requests whose body names the sale. */
+  public List<Call> decreaseCallsFor(String saleId) {
+    return decreaseCalls().stream().filter(c -> c.body().contains(saleId)).toList();
   }
 
   public List<Call> calls() {
@@ -100,12 +167,15 @@ public final class DependencyStub {
   private void handle(HttpExchange exchange) throws IOException {
     try {
       String path = exchange.getRequestURI().getPath();
+      String requestBody =
+          new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
       calls.add(
           new Call(
               exchange.getRequestMethod(),
               path,
               exchange.getRequestHeaders().getFirst("X-Trace-Id"),
-              exchange.getRequestHeaders().getFirst("X-Service-Token")));
+              exchange.getRequestHeaders().getFirst("X-Service-Token"),
+              requestBody));
       switch (mode) {
         case SERVER_ERROR ->
             reply(
@@ -135,6 +205,17 @@ public final class DependencyStub {
   }
 
   private void answer(HttpExchange exchange, String path) throws IOException {
+    if (exchange.getRequestMethod().equals("POST") && path.endsWith("/decrease")) {
+      Reply reply = decreaseScript.poll();
+      if (reply == null) {
+        reply = Reply.applied();
+      }
+      if (reply.drop()) {
+        return; // closed in handle(): the client sees a broken connection
+      }
+      reply(exchange, reply.status(), reply.body());
+      return;
+    }
     String body = bodies.get(path);
     if (body == null) {
       String code = name.equals("product") ? "PRODUCT_NOT_FOUND" : "SLOT_NOT_FOUND";

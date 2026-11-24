@@ -37,6 +37,8 @@ public abstract class AbstractApiTest {
     registry.add("spring.datasource.password", POSTGRES::getPassword);
     registry.add("core.service-tokens.gateway", () -> GATEWAY_TOKEN);
     registry.add("core.service-tokens.inventory", () -> INVENTORY_TOKEN);
+    // Issue #32: the outbox worker is driven by the tests (OutboxWorker.runOnce), never by a timer.
+    registry.add("outbox.scheduler-enabled", () -> "false");
   }
 
   @Value("${local.server.port}")
