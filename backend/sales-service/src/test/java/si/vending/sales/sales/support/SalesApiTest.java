@@ -19,10 +19,10 @@ import tools.jackson.databind.json.JsonMapper;
  * Base for the sale intake tests (issue #26). Starts Product and Inventory stubs and points the
  * service at them.
  *
- * <p>Assumed configuration contract: {@code product.base-url} and {@code inventory.base-url} hold
- * the base URLs of the two services (docker-compose sets them from {@code PRODUCT_URL} and {@code
- * INVENTORY_URL}). A machine sale arrives with the gateway {@code X-Service-Token} and the {@code
- * X-Machine-Id} the gateway derived from the machine key.
+ * <p>Assumed configuration contract: {@code product-client.base-url} and {@code
+ * inventory-client.base-url} hold the base URLs of the two services (docker-compose sets them from
+ * {@code PRODUCT_URL} and {@code INVENTORY_URL}). A machine sale arrives with the gateway {@code
+ * X-Service-Token} and the {@code X-Machine-Id} the gateway derived from the machine key.
  */
 public abstract class SalesApiTest extends AbstractApiTest {
 
@@ -34,8 +34,8 @@ public abstract class SalesApiTest extends AbstractApiTest {
 
   @DynamicPropertySource
   static void salesProperties(DynamicPropertyRegistry registry) {
-    registry.add("product.base-url", PRODUCT::baseUrl);
-    registry.add("inventory.base-url", INVENTORY::baseUrl);
+    registry.add("product-client.base-url", PRODUCT::baseUrl);
+    registry.add("inventory-client.base-url", INVENTORY::baseUrl);
   }
 
   @AfterEach
