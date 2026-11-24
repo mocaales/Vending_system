@@ -95,6 +95,212 @@ paths:
       x-callers:
       - OPERATOR
       - frontend-api
+  /v1/inventory/refill:
+    post:
+      tags:
+      - Stock
+      summary: Refill Slot
+      description: Polnitev predala (premik REFILL); idempotentno po refillId. Vrne
+        predal po polnitvi.
+      operationId: refill_slot_v1_inventory_refill_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefillIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotOut'
+        '400':
+          description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed
+            UUID.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '401':
+          description: '`UNAUTHENTICATED`: missing or invalid service token or operator
+            identity.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '403':
+          description: '`CALLER_NOT_ALLOWED`: the caller may not use this operation.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '422':
+          description: '`VALIDATION_ERROR` (also an expired batch or more than 1000
+            items) or `REFERENCE_NOT_FOUND` (unknown product).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '500':
+          description: '`INTERNAL_ERROR`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '503':
+          description: '`DEPENDENCY_UNAVAILABLE`: the database or a dependency does
+            not answer.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '200':
+          description: Repeated refill; the quantity is not added again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotOut'
+        '404':
+          description: '`MACHINE_NOT_FOUND` or `SLOT_NOT_FOUND` (the machine has no
+            such slot).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '409':
+          description: '`REFILL_ID_CONFLICT`, `SLOT_HAS_OTHER_BATCH`, `PRODUCT_ARCHIVED`
+            or `MACHINE_RETIRED`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+      security:
+      - ServiceToken: []
+      - OperatorId: []
+      x-callers:
+      - OPERATOR
+  /v1/inventory/movements:
+    get:
+      tags:
+      - Stock
+      summary: List Movements
+      description: Premiki zaloge, najnovejši najprej; `from` je vključen, `to` ne.
+      operationId: list_movements_v1_inventory_movements_get
+      security:
+      - ServiceToken: []
+      - OperatorId: []
+      parameters:
+      - name: machineId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Machineid
+      - name: productId
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Productid
+      - name: type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/MovementType'
+          - type: 'null'
+          title: Type
+      - name: from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: From
+      - name: to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: To
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Page_MovementOut_'
+        '400':
+          description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed
+            UUID.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '401':
+          description: '`UNAUTHENTICATED`: missing or invalid service token or operator
+            identity.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '403':
+          description: '`CALLER_NOT_ALLOWED`: the caller may not use this operation.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '422':
+          description: '`VALIDATION_ERROR` with `details`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '500':
+          description: '`INTERNAL_ERROR`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '503':
+          description: '`DEPENDENCY_UNAVAILABLE`: the database or a dependency does
+            not answer.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+      x-callers:
+      - OPERATOR
   /v1/inventory/{machine_id}:
     get:
       tags:
@@ -723,6 +929,93 @@ components:
       - traceId
       title: ErrorOut
       description: Telo napake, kot ga opisuje OpenAPI.
+    MovementOut:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        machineId:
+          type: string
+          format: uuid
+          title: Machineid
+        slot:
+          type: string
+          title: Slot
+        type:
+          $ref: '#/components/schemas/MovementType'
+        productId:
+          type: string
+          format: uuid
+          title: Productid
+        batchCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Batchcode
+        quantity:
+          type: integer
+          title: Quantity
+        saleId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Saleid
+        refillId:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+          title: Refillid
+        occurredAt:
+          type: string
+          format: date-time
+          title: Occurredat
+      type: object
+      required:
+      - id
+      - machineId
+      - slot
+      - type
+      - productId
+      - batchCode
+      - quantity
+      - saleId
+      - refillId
+      - occurredAt
+      title: MovementOut
+    MovementType:
+      type: string
+      enum:
+      - SET
+      - REFILL
+      - REMOVAL
+      - SALE
+      title: MovementType
+    Page_MovementOut_:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/MovementOut'
+          type: array
+          title: Items
+        total:
+          type: integer
+          title: Total
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      title: Page[MovementOut]
     Page_SlotOut_:
       properties:
         items:
@@ -746,6 +1039,51 @@ components:
       - limit
       - offset
       title: Page[SlotOut]
+    RefillIn:
+      properties:
+        refillId:
+          type: string
+          format: uuid
+          title: Refillid
+        machineId:
+          type: string
+          format: uuid
+          title: Machineid
+        slot:
+          type: string
+          maxLength: 8
+          minLength: 1
+          title: Slot
+        productId:
+          type: string
+          format: uuid
+          title: Productid
+        batchCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+          title: Batchcode
+        expiryDate:
+          type: string
+          format: date
+          title: Expirydate
+        quantity:
+          type: integer
+          maximum: 1000.0
+          minimum: 1.0
+          title: Quantity
+      additionalProperties: false
+      type: object
+      required:
+      - refillId
+      - machineId
+      - slot
+      - productId
+      - batchCode
+      - expiryDate
+      - quantity
+      title: RefillIn
+      description: Polnitev predala; isti refillId z istim telesom ne podvoji količine.
     SlotOut:
       properties:
         machineId:

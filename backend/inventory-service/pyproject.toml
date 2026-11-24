@@ -14,6 +14,7 @@ dependencies = [
     "psycopg[binary]~=3.3",
     "alembic~=1.20",
     "httpx~=0.28",
+    "tzdata>=2026.6",  # časovni pas Europe/Ljubljana (Alpine in Windows ga nimata)
 ]
 
 [project.optional-dependencies]
