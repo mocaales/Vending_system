@@ -36,6 +36,7 @@ class Movement(Base):
     batch_code: Mapped[str | None] = mapped_column(String(40))
     quantity: Mapped[int]  # nastavljena, dodana, odstranjena ali prodana količina
     sale_id: Mapped[UUID | None]  # samo pri SALE
+    refill_id: Mapped[UUID | None]  # samo pri REFILL
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -54,3 +55,17 @@ class Decrease(Base):
     result: Mapped[str] = mapped_column(String(25))  # APPLIED ali NEEDS_RECONCILIATION
     reason: Mapped[str | None] = mapped_column(String(20))
     quantity_after: Mapped[int]
+
+
+class Refill(Base):
+    """Shranjena polnitev; isti refillId ne podvoji količine."""
+
+    __tablename__ = "refills"
+
+    refill_id: Mapped[UUID] = mapped_column(primary_key=True)
+    machine_id: Mapped[UUID]
+    slot: Mapped[str] = mapped_column(String(8))
+    product_id: Mapped[UUID]
+    batch_code: Mapped[str] = mapped_column(String(40))
+    expiry_date: Mapped[date]
+    quantity: Mapped[int]

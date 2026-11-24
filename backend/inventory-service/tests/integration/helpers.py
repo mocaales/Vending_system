@@ -1,8 +1,10 @@
 """Pomoč za teste: glave klicateljev, lažni avtomati in izdelki ter branje premikov."""
 
+from datetime import timedelta
 from uuid import uuid4
 
 from app.core.database import get_engine
+from app.domain.expiry import local_today
 from app.repository.models import Movement
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -60,3 +62,21 @@ def movements(machine_id):
             select(Movement).where(Movement.machine_id == machine_id).order_by(Movement.occurred_at)
         ).all()
         return [(m.type, m.quantity) for m in rows]
+
+
+def refill_body(machine_id, product_id, **changes):
+    """Polnitev predala A1 z 5 kosi serije, ki poteče čez 30 dni."""
+    body = {
+        "refillId": str(uuid4()),
+        "machineId": machine_id,
+        "slot": "A1",
+        "productId": product_id,
+        "batchCode": "R2026-11",
+        "expiryDate": str(local_today() + timedelta(days=30)),
+        "quantity": 5,
+    }
+    return body | changes
+
+
+def refill(client, body):
+    return client.post("/v1/inventory/refill", json=body, headers=OPERATOR)

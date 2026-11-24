@@ -1,23 +1,33 @@
 """Poti /v1/inventory (docs/03 §7).
 
-Statične poti (npr. `product/...`) so registrirane pred potmi z `{machine_id}`, sicer bi se
-"product" bral kot oznaka avtomata.
+Statične poti (`product/...`, `refill`, `movements`) so registrirane pred potmi z
+`{machine_id}`, sicer bi se npr. "movements" bral kot oznaka avtomata.
 """
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path, Response
+from fastapi import APIRouter, Depends, Path, Query, Response
 from sqlalchemy.orm import Session
 
-from app.api.v1.schemas import DecreaseIn, DecreaseOut, SlotOut, SlotSet, ThresholdIn
+from app.api.v1.schemas import (
+    DecreaseIn,
+    DecreaseOut,
+    MovementOut,
+    RefillIn,
+    SlotOut,
+    SlotSet,
+    ThresholdIn,
+)
 from app.clients.machine import MachineClient, get_machine_client
 from app.clients.product import ProductClient, get_product_client
 from app.core.database import get_session
 from app.core.errors import COMMON_ERRORS, error_docs
 from app.core.schemas import Page, PageParams, page_params
 from app.core.security import Caller, allowed_callers
-from app.domain import decrease, stock
+from app.domain import decrease, movements, refill, stock
+from app.domain.stock import MovementType
 
 router = APIRouter(prefix="/v1/inventory", tags=["Stock"], responses=error_docs(COMMON_ERRORS))
 
@@ -36,6 +46,12 @@ machine_readers = allowed_callers("gateway", "machine", operator=True)
 MACHINE_NOT_FOUND = {404: "`MACHINE_NOT_FOUND`."}
 SLOT_NOT_FOUND = {404: "`SLOT_NOT_FOUND`."}
 SALE_ID_CONFLICT = {409: "`SALE_ID_CONFLICT`: the same `saleId` with a different body."}
+REFILL_ERRORS = {
+    404: "`MACHINE_NOT_FOUND` or `SLOT_NOT_FOUND` (the machine has no such slot).",
+    409: "`REFILL_ID_CONFLICT`, `SLOT_HAS_OTHER_BATCH`, `PRODUCT_ARCHIVED` or `MACHINE_RETIRED`.",
+    422: "`VALIDATION_ERROR` (also an expired batch or more than 1000 items) or "
+    "`REFERENCE_NOT_FOUND` (unknown product).",
+}
 SET_ERRORS = {
     404: "`MACHINE_NOT_FOUND` or `SLOT_NOT_FOUND` (the machine has no such slot).",
     409: "`SLOT_NOT_EMPTY`, `PRODUCT_ARCHIVED` or `MACHINE_RETIRED`.",
@@ -54,6 +70,46 @@ SET_ERRORS = {
 def list_product_stock(session: SessionDep, page: PageDep, product_id: UUID) -> Page[SlotOut]:
     """Predali z izdelkom v vseh avtomatih (UI jih prikaže pred arhiviranjem izdelka)."""
     items, total = stock.list_product_stock(session, product_id, page.limit, page.offset)
+    return Page(items=items, total=total, limit=page.limit, offset=page.offset)
+
+
+@router.post(
+    "/refill",
+    status_code=201,
+    dependencies=operator_only,
+    responses={
+        200: {"model": SlotOut, "description": "Repeated refill; the quantity is not added again."},
+        **error_docs(REFILL_ERRORS),
+    },
+    openapi_extra={"x-callers": ["OPERATOR"]},
+)
+def refill_slot(
+    session: SessionDep, body: RefillIn, response: Response, machines: Machines, products: Products
+) -> SlotOut:
+    """Polnitev predala (premik REFILL); idempotentno po refillId. Vrne predal po polnitvi."""
+    result, created = refill.refill_slot(session, body.model_dump(), machines, products)
+    response.status_code = 201 if created else 200
+    return result
+
+
+@router.get(
+    "/movements",
+    dependencies=operator_only,
+    openapi_extra={"x-callers": ["OPERATOR"]},
+)
+def list_movements(
+    session: SessionDep,
+    page: PageDep,
+    machine_id: Annotated[UUID | None, Query(alias="machineId")] = None,
+    product_id: Annotated[UUID | None, Query(alias="productId")] = None,
+    type: MovementType | None = None,
+    since: Annotated[datetime | None, Query(alias="from")] = None,
+    until: Annotated[datetime | None, Query(alias="to")] = None,
+) -> Page[MovementOut]:
+    """Premiki zaloge, najnovejši najprej; `from` je vključen, `to` ne."""
+    items, total = movements.list_movements(
+        session, machine_id, product_id, type, since, until, page.limit, page.offset
+    )
     return Page(items=items, total=total, limit=page.limit, offset=page.offset)
 
 

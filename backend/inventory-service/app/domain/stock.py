@@ -65,10 +65,10 @@ def set_slot(
     if current is not None and _same(current, data):
         return current
 
-    _check_machine_slot(machines, machine_id, slot)
-    _check_product_active(products, data["product_id"])
+    check_machine_slot(machines, machine_id, slot)
+    check_product_active(products, data["product_id"])
 
-    stock = _lock_or_create(session, machine_id, slot)
+    stock = lock_or_create(session, machine_id, slot)
     if stock.quantity > 0 and stock.product_id != data["product_id"]:
         raise ApiError(409, "SLOT_NOT_EMPTY", "Slot holds another product; empty it first.")
 
@@ -118,7 +118,7 @@ def _same(stock: Slot, data: dict) -> bool:
     return all(getattr(stock, field) == value for field, value in data.items())
 
 
-def _check_machine_slot(machines: MachineClient, machine_id: UUID, slot: str) -> None:
+def check_machine_slot(machines: MachineClient, machine_id: UUID, slot: str) -> None:
     """Avtomat in predal morata obstajati v Machine, avtomat ne sme biti umaknjen."""
     machine = machines.get_machine(machine_id)
     if machine is None:
@@ -129,7 +129,7 @@ def _check_machine_slot(machines: MachineClient, machine_id: UUID, slot: str) ->
         raise ApiError(404, "SLOT_NOT_FOUND", "Machine has no such slot.")
 
 
-def _check_product_active(products: ProductClient, product_id: UUID) -> None:
+def check_product_active(products: ProductClient, product_id: UUID) -> None:
     """Izdelek mora obstajati; arhiviranega ni mogoče vstaviti ali dopolniti (B6)."""
     product = products.get_product(product_id)
     if product is None:
@@ -138,7 +138,7 @@ def _check_product_active(products: ProductClient, product_id: UUID) -> None:
         raise ApiError(409, "PRODUCT_ARCHIVED", "Archived product cannot be stocked.")
 
 
-def _lock_or_create(session: Session, machine_id: UUID, slot: str) -> Slot:
+def lock_or_create(session: Session, machine_id: UUID, slot: str) -> Slot:
     """Zaklene vrstico predala (in jo prej ustvari, če je ni), da sočasni klici čakajo."""
     session.execute(
         insert(Slot)
@@ -154,6 +154,7 @@ def add_movement(
     type: MovementType,
     quantity: int,
     sale_id: UUID | None = None,
+    refill_id: UUID | None = None,
 ) -> None:
     session.add(
         Movement(
@@ -164,5 +165,6 @@ def add_movement(
             batch_code=stock.batch_code,
             quantity=quantity,
             sale_id=sale_id,
+            refill_id=refill_id,
         )
     )
