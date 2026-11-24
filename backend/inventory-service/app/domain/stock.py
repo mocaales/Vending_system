@@ -85,13 +85,19 @@ def empty_slot(session: Session, machine_id: UUID, slot: str) -> None:
     if stock.product_id is None:
         return  # že prazen: 204 brez premika
 
+    clear_slot(session, stock)
+    session.commit()
+
+
+def clear_slot(session: Session, stock: Slot) -> None:
+    """Odstrani izdelek in serijo iz (zaklenjenega) predala; premik REMOVAL z odstranjeno
+    količino, če je bila večja od 0. Prag nizke zaloge ostane."""
     if stock.quantity > 0:
         add_movement(session, stock, MovementType.REMOVAL, stock.quantity)
     stock.product_id = None
     stock.batch_code = None
     stock.expiry_date = None
     stock.quantity = 0
-    session.commit()
 
 
 def set_threshold(session: Session, machine_id: UUID, slot: str, threshold: int) -> Slot:
