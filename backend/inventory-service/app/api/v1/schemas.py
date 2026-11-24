@@ -91,3 +91,18 @@ class MovementOut(BaseModel):
     sale_id: UUID | None
     refill_id: UUID | None
     occurred_at: datetime
+
+
+class RemovedOut(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True)
+
+    slot: str
+    product_id: UUID
+    batch_code: str | None
+    quantity: int
+
+
+class ExpiredOut(BaseModel):
+    """Odstranjene potekle serije; ponovitev vrne prazen seznam."""
+
+    removed: list[RemovedOut]

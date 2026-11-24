@@ -1,6 +1,6 @@
 """Poti /v1/inventory (docs/03 §7).
 
-Statične poti (`product/...`, `refill`, `movements`) so registrirane pred potmi z
+Statične poti (`product/...`, `refill`, `movements`, `expired`) so registrirane pred potmi z
 `{machine_id}`, sicer bi se npr. "movements" bral kot oznaka avtomata.
 """
 
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.schemas import (
     DecreaseIn,
     DecreaseOut,
+    ExpiredOut,
     MovementOut,
     RefillIn,
     SlotOut,
@@ -26,7 +27,7 @@ from app.core.database import get_session
 from app.core.errors import COMMON_ERRORS, error_docs
 from app.core.schemas import Page, PageParams, page_params
 from app.core.security import Caller, allowed_callers
-from app.domain import decrease, movements, refill, stock
+from app.domain import decrease, expired, movements, refill, stock
 from app.domain.stock import MovementType
 
 router = APIRouter(prefix="/v1/inventory", tags=["Stock"], responses=error_docs(COMMON_ERRORS))
@@ -111,6 +112,21 @@ def list_movements(
         session, machine_id, product_id, type, since, until, page.limit, page.offset
     )
     return Page(items=items, total=total, limit=page.limit, offset=page.offset)
+
+
+@router.delete(
+    "/expired",
+    dependencies=operator_only,
+    responses=error_docs(MACHINE_NOT_FOUND),
+    openapi_extra={"x-callers": ["OPERATOR"]},
+)
+def remove_expired(
+    session: SessionDep,
+    machine_id: Annotated[UUID, Query(alias="machineId")],
+    machines: Machines,
+) -> ExpiredOut:
+    """Izprazni predale avtomata s poteklo zalogo (B4), po en premik REMOVAL na predal."""
+    return ExpiredOut(removed=expired.remove_expired(session, machine_id, machines))
 
 
 # --- poti z {machine_id} -----------------------------------------------------------------

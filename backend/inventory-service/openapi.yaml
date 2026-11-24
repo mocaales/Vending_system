@@ -301,6 +301,79 @@ paths:
                 $ref: '#/components/schemas/ErrorOut'
       x-callers:
       - OPERATOR
+  /v1/inventory/expired:
+    delete:
+      tags:
+      - Stock
+      summary: Remove Expired
+      description: Izprazni predale avtomata s poteklo zalogo (B4), po en premik REMOVAL
+        na predal.
+      operationId: remove_expired_v1_inventory_expired_delete
+      security:
+      - ServiceToken: []
+      - OperatorId: []
+      parameters:
+      - name: machineId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Machineid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpiredOut'
+        '400':
+          description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed
+            UUID.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '401':
+          description: '`UNAUTHENTICATED`: missing or invalid service token or operator
+            identity.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '403':
+          description: '`CALLER_NOT_ALLOWED`: the caller may not use this operation.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '422':
+          description: '`VALIDATION_ERROR` with `details`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '500':
+          description: '`INTERNAL_ERROR`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '503':
+          description: '`DEPENDENCY_UNAVAILABLE`: the database or a dependency does
+            not answer.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+        '404':
+          description: '`MACHINE_NOT_FOUND`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorOut'
+      x-callers:
+      - OPERATOR
   /v1/inventory/{machine_id}:
     get:
       tags:
@@ -929,6 +1002,18 @@ components:
       - traceId
       title: ErrorOut
       description: Telo napake, kot ga opisuje OpenAPI.
+    ExpiredOut:
+      properties:
+        removed:
+          items:
+            $ref: '#/components/schemas/RemovedOut'
+          type: array
+          title: Removed
+      type: object
+      required:
+      - removed
+      title: ExpiredOut
+      description: Odstranjene potekle serije; ponovitev vrne prazen seznam.
     MovementOut:
       properties:
         id:
@@ -1084,6 +1169,30 @@ components:
       - quantity
       title: RefillIn
       description: Polnitev predala; isti refillId z istim telesom ne podvoji količine.
+    RemovedOut:
+      properties:
+        slot:
+          type: string
+          title: Slot
+        productId:
+          type: string
+          format: uuid
+          title: Productid
+        batchCode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Batchcode
+        quantity:
+          type: integer
+          title: Quantity
+      type: object
+      required:
+      - slot
+      - productId
+      - batchCode
+      - quantity
+      title: RemovedOut
     SlotOut:
       properties:
         machineId:
