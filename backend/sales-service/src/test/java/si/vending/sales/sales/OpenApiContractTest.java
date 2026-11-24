@@ -98,4 +98,32 @@ class OpenApiContractTest extends AbstractApiTest {
     assertThat(expected).contains("resolveReconciliation");
     assertThat(operation(runtime, path, "put")).isEqualTo(expected);
   }
+
+  /**
+   * #55 criterion: the six closing operations are documented at runtime as in the committed file
+   * (operationIds createClosing, listClosings, deleteClosingsByDate, getClosing, updateClosing,
+   * deleteClosing and their response codes).
+   */
+  @Test
+  void runtimeSpecDocumentsTheClosingOperationsLikeTheCommittedFile() throws IOException {
+    Map<String, Object> runtime = get("/openapi.json").json();
+    Map<String, Object> committed = committed();
+    String list = "/v1/sales/closings";
+    String one = "/v1/sales/closings/{id}";
+    String[][] operations = {
+      {list, "post", "createClosing"},
+      {list, "get", "listClosings"},
+      {list, "delete", "deleteClosingsByDate"},
+      {one, "get", "getClosing"},
+      {one, "put", "updateClosing"},
+      {one, "delete", "deleteClosing"}
+    };
+
+    for (String[] op : operations) {
+      String expected = operation(committed, op[0], op[1]);
+      assertThat(expected).as("committed " + op[1] + " " + op[0]).doesNotStartWith("no ");
+      assertThat(expected).contains(op[2]);
+      assertThat(operation(runtime, op[0], op[1])).isEqualTo(expected);
+    }
+  }
 }
