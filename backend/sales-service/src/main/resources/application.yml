@@ -35,6 +35,14 @@ logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
 
+product:
+  base-url: ${PRODUCT_URL:http://product-service:8000}
+  service-token: ${SALES_SERVICE_TOKEN:}
+
+inventory:
+  base-url: ${INVENTORY_URL:http://inventory-service:8000}
+  service-token: ${SALES_SERVICE_TOKEN:}
+
 core:
   service-tokens:
     gateway: ${GATEWAY_SERVICE_TOKEN:}

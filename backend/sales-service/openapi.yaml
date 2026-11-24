@@ -49,6 +49,12 @@ paths:
         `SALE_ID_CONFLICT`. `machineId` must match the authenticated machine (`X-Machine-Id`),
         otherwise 403 `MACHINE_KEY_MISMATCH`.
 
+        `X-Machine-Id` counts only together with the gateway's `X-Service-Token`. Without it, or
+        when it is blank, the request is 403 `CALLER_NOT_ALLOWED` (an `X-Operator-Id` instead does
+        not help). A value that is not a UUID, both `X-Machine-Id` and `X-Operator-Id`, or an
+        identity header sent more than once (also as a comma-joined list) is 401 `UNAUTHENTICATED`.
+        These checks run before any other work; a rejected request stores nothing.
+
         On receipt Sales checks the product (Product) and the slot (Inventory); an unknown one is
         422 `REFERENCE_NOT_FOUND`. `occurredAt` more than 5 minutes in the future is 422
         `TIMESTAMP_OUT_OF_RANGE`. If Product or Inventory does not answer, the response is 503, nothing
@@ -81,9 +87,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SaleOut'
         '400': {$ref: '#/components/responses/BadRequest'}
-        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '401':
+          description: '`UNAUTHENTICATED`: missing or invalid service token, or a malformed or ambiguous machine identity.'
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
         '403':
-          description: '`MACHINE_KEY_MISMATCH` (the key belongs to another machine than `machineId`), `FORBIDDEN` or `CALLER_NOT_ALLOWED`.'
+          description: '`MACHINE_KEY_MISMATCH` (the key belongs to another machine than `machineId`) or `CALLER_NOT_ALLOWED` (not the gateway acting for a machine).'
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -635,13 +645,14 @@ components:
           type: string
           minLength: 1
           maxLength: 8
+          pattern: '^[A-Za-z0-9_-]{1,8}$'
           description: '`slotCode` of the slot, for example `A1`.'
         productId: {type: string, format: uuid}
         quantity: {type: integer, minimum: 1, maximum: 100}
         unitPricePaid: {$ref: '#/components/schemas/Money'}
         currency: {$ref: '#/components/schemas/Currency'}
         paymentMethod: {$ref: '#/components/schemas/PaymentMethod'}
-        occurredAt: {type: string, format: date-time, description: UTC time of the sale.}
+        occurredAt: {type: string, format: date-time, description: UTC time of the sale. Not before `2020-01-01T00:00:00Z`; an earlier time is 422 `VALIDATION_ERROR`.}
       additionalProperties: false
       examples:
         - saleId: 6b1f0c2e-5a34-4d7e-9a10-2f6c1b7d8e01
