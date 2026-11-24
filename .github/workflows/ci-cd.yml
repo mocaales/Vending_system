@@ -114,7 +114,16 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: maven
+
+      # Per-job key: a shared key lets the first job to save (lint) win with only validate-phase plugins.
+      - uses: actions/cache@v6
+        if: needs.discover.outputs.has_java == 'true'
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ github.job }}-${{ hashFiles('backend/*/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-${{ github.job }}-
+            maven-${{ runner.os }}-
 
       - name: Maven validate (lint)
         if: needs.discover.outputs.has_java == 'true'
@@ -123,11 +132,34 @@ jobs:
           COMPONENTS: ${{ needs.discover.outputs.java }}
         run: |
           set -euo pipefail
+          # Retry Maven only when dependency/plugin resolution failed (e.g. Central HTTP 429);
+          # compile, test and lint failures fail on the first attempt.
+          mvn_retry() {
+            local -a delays
+            local attempt=1 rc log
+            read -ra delays <<< "${MVN_RETRY_DELAYS:-20 60}"
+            log=$(mktemp)
+            while true; do
+              "$@" -Daether.transport.http.retryHandler.count=5 \
+                   -Daether.transport.http.retryHandler.interval=10000 \
+                   -Daether.transport.http.retryHandler.intervalMax=60000 2>&1 | tee "$log" && rc=0 || rc=${PIPESTATUS[0]}
+              [ "$rc" -eq 0 ] && break
+              if [ "$attempt" -le ${#delays[@]} ] && grep -Eq 'Could not transfer artifact|Could not resolve|status code: 429|Connection reset|Read timed out' "$log"; then
+                echo "::warning::Maven dependency resolution failed (attempt $attempt), retrying in ${delays[$((attempt-1))]}s"
+                sleep "${delays[$((attempt-1))]}"
+                attempt=$((attempt+1))
+              else
+                break
+              fi
+            done
+            rm -f "$log"
+            return "$rc"
+          }
           failed=()
           for c in $COMPONENTS; do
             echo "::group::mvn validate $c"
             mvn_bin=mvn; [ -x "$c/mvnw" ] && mvn_bin=./mvnw
-            (cd "$c" && "$mvn_bin" -B -ntp validate) || failed+=("$c")
+            (cd "$c" && mvn_retry "$mvn_bin" -B -ntp validate) || failed+=("$c")
             echo "::endgroup::"
           done
           if [ ${#failed[@]} -gt 0 ]; then
@@ -247,7 +279,16 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: maven
+
+      # Per-job key: a shared key lets the first job to save (lint) win with only validate-phase plugins.
+      - uses: actions/cache@v6
+        if: needs.discover.outputs.has_java == 'true'
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ github.job }}-${{ hashFiles('backend/*/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-${{ github.job }}-
+            maven-${{ runner.os }}-
 
       - name: Build Java packages
         if: needs.discover.outputs.has_java == 'true'
@@ -256,11 +297,34 @@ jobs:
           COMPONENTS: ${{ needs.discover.outputs.java }}
         run: |
           set -euo pipefail
+          # Retry Maven only when dependency/plugin resolution failed (e.g. Central HTTP 429);
+          # compile, test and lint failures fail on the first attempt.
+          mvn_retry() {
+            local -a delays
+            local attempt=1 rc log
+            read -ra delays <<< "${MVN_RETRY_DELAYS:-20 60}"
+            log=$(mktemp)
+            while true; do
+              "$@" -Daether.transport.http.retryHandler.count=5 \
+                   -Daether.transport.http.retryHandler.interval=10000 \
+                   -Daether.transport.http.retryHandler.intervalMax=60000 2>&1 | tee "$log" && rc=0 || rc=${PIPESTATUS[0]}
+              [ "$rc" -eq 0 ] && break
+              if [ "$attempt" -le ${#delays[@]} ] && grep -Eq 'Could not transfer artifact|Could not resolve|status code: 429|Connection reset|Read timed out' "$log"; then
+                echo "::warning::Maven dependency resolution failed (attempt $attempt), retrying in ${delays[$((attempt-1))]}s"
+                sleep "${delays[$((attempt-1))]}"
+                attempt=$((attempt+1))
+              else
+                break
+              fi
+            done
+            rm -f "$log"
+            return "$rc"
+          }
           failed=()
           for c in $COMPONENTS; do
             echo "::group::mvn package $c"
             mvn_bin=mvn; [ -x "$c/mvnw" ] && mvn_bin=./mvnw
-            (cd "$c" && "$mvn_bin" -B -ntp -DskipTests package) || failed+=("$c")
+            (cd "$c" && mvn_retry "$mvn_bin" -B -ntp -DskipTests package) || failed+=("$c")
             echo "::endgroup::"
           done
           if [ ${#failed[@]} -gt 0 ]; then
@@ -426,7 +490,16 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-          cache: maven
+
+      # Per-job key: a shared key lets the first job to save (lint) win with only validate-phase plugins.
+      - uses: actions/cache@v6
+        if: needs.discover.outputs.has_java == 'true'
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ github.job }}-${{ hashFiles('backend/*/pom.xml') }}
+          restore-keys: |
+            maven-${{ runner.os }}-${{ github.job }}-
+            maven-${{ runner.os }}-
 
       - name: Test Java backends
         if: needs.discover.outputs.has_java == 'true'
@@ -435,11 +508,34 @@ jobs:
           COMPONENTS: ${{ needs.discover.outputs.java }}
         run: |
           set -euo pipefail
+          # Retry Maven only when dependency/plugin resolution failed (e.g. Central HTTP 429);
+          # compile, test and lint failures fail on the first attempt.
+          mvn_retry() {
+            local -a delays
+            local attempt=1 rc log
+            read -ra delays <<< "${MVN_RETRY_DELAYS:-20 60}"
+            log=$(mktemp)
+            while true; do
+              "$@" -Daether.transport.http.retryHandler.count=5 \
+                   -Daether.transport.http.retryHandler.interval=10000 \
+                   -Daether.transport.http.retryHandler.intervalMax=60000 2>&1 | tee "$log" && rc=0 || rc=${PIPESTATUS[0]}
+              [ "$rc" -eq 0 ] && break
+              if [ "$attempt" -le ${#delays[@]} ] && grep -Eq 'Could not transfer artifact|Could not resolve|status code: 429|Connection reset|Read timed out' "$log"; then
+                echo "::warning::Maven dependency resolution failed (attempt $attempt), retrying in ${delays[$((attempt-1))]}s"
+                sleep "${delays[$((attempt-1))]}"
+                attempt=$((attempt+1))
+              else
+                break
+              fi
+            done
+            rm -f "$log"
+            return "$rc"
+          }
           failed=()
           for c in $COMPONENTS; do
             echo "::group::mvn verify $c"
             mvn_bin=mvn; [ -x "$c/mvnw" ] && mvn_bin=./mvnw
-            (cd "$c" && "$mvn_bin" -B -ntp verify) || failed+=("$c")
+            (cd "$c" && mvn_retry "$mvn_bin" -B -ntp verify) || failed+=("$c")
             echo "::endgroup::"
           done
           if [ ${#failed[@]} -gt 0 ]; then
