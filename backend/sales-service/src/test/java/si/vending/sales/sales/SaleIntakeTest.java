@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -134,9 +135,12 @@ class SaleIntakeTest extends SalesApiTest {
   void occurredAtJustInsideTheFiveMinuteWindowAndInThePastIsAccepted() {
     Setup setup = knownSlot();
     Map<String, Object> soon = sale(setup);
-    soon.put("occurredAt", Instant.now().plusSeconds(4 * 60).toString());
+    soon.put(
+        "occurredAt", Instant.now().plusSeconds(4 * 60).truncatedTo(ChronoUnit.MILLIS).toString());
     Map<String, Object> old = sale(setup);
-    old.put("occurredAt", Instant.now().minus(Duration.ofDays(3)).toString());
+    old.put(
+        "occurredAt",
+        Instant.now().minus(Duration.ofDays(3)).truncatedTo(ChronoUnit.MILLIS).toString());
 
     assertThat(postSale(soon).status()).isEqualTo(201);
     assertThat(postSale(old).status()).isEqualTo(201);

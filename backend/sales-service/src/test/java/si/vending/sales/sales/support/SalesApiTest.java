@@ -3,6 +3,7 @@ package si.vending.sales.sales.support;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -85,7 +86,8 @@ public abstract class SalesApiTest extends AbstractApiTest {
     body.put("unitPricePaid", "2.50");
     body.put("currency", "EUR");
     body.put("paymentMethod", "CARD");
-    body.put("occurredAt", Instant.now().minusSeconds(30).toString());
+    body.put(
+        "occurredAt", Instant.now().minusSeconds(30).truncatedTo(ChronoUnit.MILLIS).toString());
     return body;
   }
 
