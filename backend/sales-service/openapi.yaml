@@ -678,7 +678,14 @@ components:
       required: [resolution, note, resolvedAt, resolvedBy]
       properties:
         resolution: {$ref: '#/components/schemas/ReconciliationResolution'}
-        note: {type: string, minLength: 1, maxLength: 500}
+        note:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '^[^\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069]*$'
+          description: >-
+            Length in characters (code points), 1 to 500. Not only whitespace, no lone
+            surrogates; control characters other than tab and newline are refused.
         resolvedAt: {type: string, format: date-time}
         resolvedBy: {type: string, format: uuid, description: Operator id.}
     SaleOut:
@@ -716,7 +723,14 @@ components:
       required: [resolution, note]
       properties:
         resolution: {$ref: '#/components/schemas/ReconciliationResolution'}
-        note: {type: string, minLength: 1, maxLength: 500}
+        note:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: '^[^\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029\u202A-\u202E\u2066-\u2069]*$'
+          description: >-
+            Length in characters (code points), 1 to 500. Not only whitespace, no lone
+            surrogates; control characters other than tab and newline are refused.
       additionalProperties: false
     Totals:
       type: object

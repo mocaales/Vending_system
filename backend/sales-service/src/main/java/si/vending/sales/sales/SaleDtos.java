@@ -15,6 +15,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,6 +71,67 @@ public final class SaleDtos {
     RESOLVED
   }
 
+  public enum Resolution {
+    ADJUSTED,
+    WRITTEN_OFF
+  }
+
+  /**
+   * Characters refused in a reconciliation note (same pattern as in openapi.yaml): control
+   * characters except tab and newline (C0, DEL, C1), line and paragraph separators and the bidi
+   * embedding, override and isolate characters. Lone surrogates are refused separately.
+   */
+  public static final String NOTE_PATTERN =
+      "^[^\\u0000-\\u0008\\u000B-\\u001F\\u007F-\\u009F\\u2028\\u2029\\u202A-\\u202E"
+          + "\\u2066-\\u2069]*$";
+
+  private static final java.util.regex.Pattern NOTE_REGEX =
+      java.util.regex.Pattern.compile(NOTE_PATTERN);
+
+  @Documented
+  @Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.RECORD_COMPONENT})
+  @Retention(RetentionPolicy.RUNTIME)
+  @Constraint(validatedBy = ReconciliationNoteValidator.class)
+  public @interface ReconciliationNote {
+    String message() default
+        "must be 1 to 500 characters of text without control, invisible or direction characters";
+
+    Class<?>[] groups() default {};
+
+    Class<? extends Payload>[] payload() default {};
+  }
+
+  /** Length in code points, no lone surrogates, not blank, no refused characters. */
+  public static final class ReconciliationNoteValidator
+      implements ConstraintValidator<ReconciliationNote, String> {
+    @Override
+    public boolean isValid(String value, ConstraintValidatorContext context) {
+      if (value == null) {
+        return true;
+      }
+      int count = value.codePointCount(0, value.length());
+      if (count < 1 || count > 500) {
+        return false;
+      }
+      boolean blank = true;
+      for (int i = 0; i < value.length(); ) {
+        int cp = value.codePointAt(i);
+        if (cp >= Character.MIN_SURROGATE && cp <= Character.MAX_SURROGATE) {
+          return false;
+        }
+        if (!Character.isWhitespace(cp)) {
+          blank = false;
+        }
+        i += Character.charCount(cp);
+      }
+      return !blank && NOTE_REGEX.matcher(value).matches();
+    }
+  }
+
+  /** Body of the reconciliation PUT. */
+  public record ReconciliationIn(
+      @NotNull Resolution resolution, @NotNull @ReconciliationNote String note) {}
+
   /** A sale sent by a machine; every field is required. Money is a decimal string. */
   public record SaleEvent(
       @NotNull UUID saleId,
@@ -85,7 +147,7 @@ public final class SaleDtos {
   public record InventoryResult(ReconciliationState state, String reason) {}
 
   public record ReconciliationOut(
-      String resolution, String note, Instant resolvedAt, UUID resolvedBy) {}
+      Resolution resolution, String note, Instant resolvedAt, UUID resolvedBy) {}
 
   public record SaleOut(
       UUID saleId,
@@ -115,7 +177,13 @@ public final class SaleDtos {
           s.occurredAt(),
           s.receivedAt(),
           new InventoryResult(s.inventoryState(), reason),
-          null);
+          s.resolution() == null
+              ? null
+              : new ReconciliationOut(
+                  s.resolution(),
+                  s.note(),
+                  s.resolvedAt().truncatedTo(ChronoUnit.MICROS),
+                  s.resolvedBy()));
     }
   }
 

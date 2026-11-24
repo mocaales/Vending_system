@@ -83,4 +83,19 @@ class OpenApiContractTest extends AbstractApiTest {
     assertThat(intake(runtime)).isEqualTo(intake(committed()));
     assertThat(Set.of(intake(runtime))).doesNotContain("no POST /v1/sales");
   }
+
+  /**
+   * #35 criterion: the reconciliation operation is documented at runtime as in the committed file.
+   */
+  @Test
+  void runtimeSpecDocumentsTheReconciliationOperationLikeTheCommittedFile() throws IOException {
+    Map<String, Object> runtime = get("/openapi.json").json();
+    Map<String, Object> committed = committed();
+    String path = "/v1/sales/{saleId}/reconciliation";
+
+    String expected = operation(committed, path, "put");
+    assertThat(expected).as("committed " + path).doesNotStartWith("no ");
+    assertThat(expected).contains("resolveReconciliation");
+    assertThat(operation(runtime, path, "put")).isEqualTo(expected);
+  }
 }
