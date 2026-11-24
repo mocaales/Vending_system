@@ -1,0 +1,339 @@
+openapi: 3.1.0
+info:
+  title: Inventory Service API
+  version: 1.0.0
+  description: |
+    Stock in the slots of vending machines.
+    Contract source: docs/03-api-pogodbe.md section 7 (conventions in sections 1 and 2).
+    This contract covers what other components need first: reading the stock of a machine and of
+    one slot, and decreasing stock after a sale. Setting, refilling and emptying slots and the
+    movements follow in their own issues.
+
+    Conventions:
+    - All paths carry the service prefix `/v1`; the gateway exposes them as `/api/v1/...`.
+    - A slot is `(machineId, slot)`, where `slot` is the `slotCode` of the machine (e.g. `A1`).
+    - IDs are UUIDs, dates are `YYYY-MM-DD`, enums are UPPER_SNAKE.
+    - Request bodies reject unknown fields with 422 `VALIDATION_ERROR`.
+    - Lists return `{items, total, limit, offset}`; `limit` defaults to 50 (max 200).
+    - Every operation can also return 400, 500, 503 and 504; every operation is authenticated
+      (401, 403); 422 applies where a body or parameter exists. These are shared responses.
+    - Each operation lists its allowed callers in `x-callers`. A caller outside that list gets
+      403 `CALLER_NOT_ALLOWED`.
+    - A read by another service never calls a further service (no call loops such as
+      Machine -> Inventory -> Machine).
+    - Static paths (`movements`, `refill`, `expired`, `product/...`) are registered before the
+      paths with `{machineId}`, so that they are not read as a machine id.
+servers:
+  - url: /
+    description: Service-relative; paths already include the `/v1` prefix.
+tags:
+  - name: Stock
+    description: Stock of machines and slots.
+paths:
+  /v1/inventory/{machineId}:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Stock]
+      operationId: getMachineStock
+      summary: Stock of a machine
+      description: |
+        Stock records of the machine, one per slot, sorted by `slot`. A slot that was never set
+        has no record.
+
+        For the callers `machine` and `frontend-api` Inventory answers from its own data without
+        calling Machine, so an unknown machine returns an empty list. For `OPERATOR` Inventory
+        first checks the machine in Machine: an unknown machine returns 404 `MACHINE_NOT_FOUND`,
+        an unreachable Machine 503.
+      x-callers: [OPERATOR, frontend-api, machine]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Page of slot stock.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotStockList'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MachineNotFound'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/inventory/{machineId}/{slot}:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/Slot'
+      - $ref: '#/components/parameters/TraceId'
+    get:
+      tags: [Stock]
+      operationId: getSlotStock
+      summary: Stock of one slot
+      description: |
+        An emptied slot is still returned (no product, quantity 0, threshold kept).
+        A slot that was never set returns 404 `SLOT_NOT_FOUND`.
+      x-callers: [OPERATOR, frontend-api, sales]
+      security:
+        - OperatorId: []
+        - ServiceToken: []
+      responses:
+        '200':
+          description: The slot stock.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotStock'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/SlotNotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+  /v1/inventory/{machineId}/{slot}/decrease:
+    parameters:
+      - $ref: '#/components/parameters/MachineId'
+      - $ref: '#/components/parameters/Slot'
+      - $ref: '#/components/parameters/TraceId'
+    post:
+      tags: [Stock]
+      operationId: decreaseStock
+      summary: Decrease stock after a sale
+      description: |
+        Internal only; called by the Sales outbox worker once per `saleId`.
+
+        - The stock is decreased only when the slot holds the same product and enough items
+          (`APPLIED`, movement `SALE`).
+        - Otherwise the stock does not change and never becomes negative; the answer is still
+          201 with `NEEDS_RECONCILIATION` and a `reason`.
+        - Idempotent by `saleId`: the same body again returns 200 with the stored result; a
+          different body with the same `saleId` returns 409 `SALE_ID_CONFLICT`.
+      x-callers: [sales]
+      security:
+        - ServiceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecreaseIn'
+      responses:
+        '201':
+          description: Decrease handled for the first time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecreaseOut'
+        '200':
+          description: Repeated request with the same body; the stored result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecreaseOut'
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/SlotNotFound'}
+        '409': {$ref: '#/components/responses/SaleIdConflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+        '504': {$ref: '#/components/responses/UpstreamTimeout'}
+components:
+  securitySchemes:
+    OperatorId:
+      type: apiKey
+      in: header
+      name: X-Operator-Id
+      description: Set by the gateway after verifying the operator JWT; any client-sent value is stripped there.
+    ServiceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: Internal token of the calling component (one per component, from the environment).
+  parameters:
+    TraceId:
+      name: X-Trace-Id
+      in: header
+      required: false
+      description: Trace id created at the gateway and propagated between services.
+      schema: {type: string}
+    MachineId:
+      name: machineId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Slot:
+      name: slot
+      in: path
+      required: true
+      description: The `slotCode` of the machine.
+      schema: {type: string, minLength: 1, maxLength: 8, examples: [A1]}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    Offset:
+      name: offset
+      in: query
+      schema: {type: integer, minimum: 0, default: 0}
+  responses:
+    BadRequest:
+      description: '`BAD_REQUEST`: unreadable JSON, bad parameter or malformed UUID.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthenticated:
+      description: '`UNAUTHENTICATED`: missing or invalid service token or operator identity.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Forbidden:
+      description: '`CALLER_NOT_ALLOWED`: the caller may not use this operation.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    MachineNotFound:
+      description: '`MACHINE_NOT_FOUND` (only for `OPERATOR`).'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SlotNotFound:
+      description: '`SLOT_NOT_FOUND`: the slot was never set.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    SaleIdConflict:
+      description: '`SALE_ID_CONFLICT`: the same `saleId` was already used with a different body.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    ValidationError:
+      description: '`VALIDATION_ERROR` with `details`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    InternalError:
+      description: '`INTERNAL_ERROR`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    DependencyUnavailable:
+      description: '`DEPENDENCY_UNAVAILABLE`: the database or a dependency does not answer; the client retries.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    UpstreamTimeout:
+      description: '`UPSTREAM_TIMEOUT`.'
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+          description: Machine-readable code, for example `SLOT_NOT_FOUND`.
+          examples: [SLOT_NOT_FOUND]
+        message:
+          type: string
+          description: Short English text; the UI maps `code` to Slovenian.
+        traceId:
+          type: string
+        details:
+          type: array
+          description: Only for `VALIDATION_ERROR`.
+          items: {$ref: '#/components/schemas/ValidationErrorDetail'}
+    ValidationErrorDetail:
+      type: object
+      required: [field, issue]
+      properties:
+        field: {type: string, examples: [quantity]}
+        issue: {type: string, examples: ['Input should be greater than or equal to 1']}
+    SlotStock:
+      type: object
+      description: Stock of one slot. An empty slot has no product, no batch and quantity 0.
+      required: [machineId, slot, productId, batchCode, expiryDate, quantity, lowStockThreshold]
+      properties:
+        machineId: {type: string, format: uuid}
+        slot: {type: string, minLength: 1, maxLength: 8, examples: [A1]}
+        productId: {type: ['string', 'null'], format: uuid}
+        batchCode: {type: ['string', 'null'], maxLength: 40, examples: [L2026-11-17]}
+        expiryDate:
+          type: ['string', 'null']
+          format: date
+          description: Local date in Europe/Ljubljana; the product is valid until the end of this day.
+        quantity: {type: integer, minimum: 0, maximum: 1000}
+        lowStockThreshold: {type: integer, minimum: 0, maximum: 1000}
+      examples:
+        - machineId: 0d9c4a52-3b1e-4f6a-8c27-91e5a7b3d410
+          slot: A1
+          productId: c3a8f7d4-12ab-4e55-b6c9-5d0e8a1f2b73
+          batchCode: L2026-11-17
+          expiryDate: '2026-12-01'
+          quantity: 8
+          lowStockThreshold: 2
+    SlotStockList:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/SlotStock'}
+        total: {type: integer, minimum: 0}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        offset: {type: integer, minimum: 0}
+    DecreaseIn:
+      type: object
+      description: One sale from the Sales outbox.
+      required: [saleId, productId, quantity]
+      properties:
+        saleId: {type: string, format: uuid}
+        productId:
+          type: string
+          format: uuid
+          description: The product of the sale; it must match the product in the slot.
+        quantity: {type: integer, minimum: 1, maximum: 100}
+      additionalProperties: false
+      examples:
+        - saleId: 6b1f0c2e-5a34-4d7e-9a10-2f6c1b7d8e01
+          productId: c3a8f7d4-12ab-4e55-b6c9-5d0e8a1f2b73
+          quantity: 1
+    DecreaseResult:
+      type: string
+      enum: [APPLIED, NEEDS_RECONCILIATION]
+    DecreaseReason:
+      type: string
+      enum: [PRODUCT_MISMATCH, INSUFFICIENT_STOCK]
+      description: |
+        `PRODUCT_MISMATCH`: the slot holds another product or is empty.
+        `INSUFFICIENT_STOCK`: the slot holds fewer items than the sale.
+        `PRODUCT_MISMATCH` is checked first.
+    DecreaseOut:
+      type: object
+      required: [result, quantityAfter]
+      properties:
+        result: {$ref: '#/components/schemas/DecreaseResult'}
+        reason:
+          $ref: '#/components/schemas/DecreaseReason'
+          description: Only with `NEEDS_RECONCILIATION`.
+        quantityAfter:
+          type: integer
+          minimum: 0
+          description: Quantity in the slot after this request (unchanged with `NEEDS_RECONCILIATION`).
+      examples:
+        - result: APPLIED
+          quantityAfter: 7
+        - result: NEEDS_RECONCILIATION
+          reason: INSUFFICIENT_STOCK
+          quantityAfter: 0
