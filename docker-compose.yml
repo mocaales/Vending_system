@@ -207,7 +207,7 @@ services:
     mem_limit: 256m
     restart: unless-stopped
 
-  # Inventory Service (Python). Kličejo ga gateway, machine, sales in monitoring; zunaj omrežja Compose ni dosegljiv.
+  # Inventory Service (Python). Kličejo ga gateway, machine, sales in monitoring, sam kliče machine in product; zunaj omrežja Compose ni dosegljiv.
   inventory-service:
     build: ./backend/inventory-service
     environment:
@@ -217,6 +217,8 @@ services:
       SALES_SERVICE_TOKEN: ${SALES_SERVICE_TOKEN:?Nastavi SALES_SERVICE_TOKEN v .env}
       MONITORING_SERVICE_TOKEN: ${MONITORING_SERVICE_TOKEN:?Nastavi MONITORING_SERVICE_TOKEN v .env}
       INVENTORY_SERVICE_TOKEN: ${INVENTORY_SERVICE_TOKEN:?Nastavi INVENTORY_SERVICE_TOKEN v .env}
+      MACHINE_URL: http://machine-service:8000
+      PRODUCT_URL: http://product-service:8000
     depends_on:
       inventory-db:
         condition: service_healthy

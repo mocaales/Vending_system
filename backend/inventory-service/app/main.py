@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.v1 import stock
 from app.core.database import run_migrations
 from app.core.setup import setup_core
 from app.core.trace import setup_logging
@@ -30,3 +31,4 @@ app = FastAPI(
     lifespan=lifespan,
 )
 setup_core(app)
+app.include_router(stock.router)
