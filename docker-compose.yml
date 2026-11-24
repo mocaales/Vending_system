@@ -171,6 +171,8 @@ services:
       GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN:?Nastavi GATEWAY_SERVICE_TOKEN v .env}
       PRODUCT_SERVICE_TOKEN: ${PRODUCT_SERVICE_TOKEN:?Nastavi PRODUCT_SERVICE_TOKEN v .env}
       SALES_SERVICE_TOKEN: ${SALES_SERVICE_TOKEN:?Nastavi SALES_SERVICE_TOKEN v .env}
+      PRODUCT_URL: http://product-service:8000
+      INVENTORY_URL: http://inventory-service:8000
     depends_on:
       sales-db:
         condition: service_healthy

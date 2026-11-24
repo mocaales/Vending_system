@@ -20,6 +20,7 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import tools.jackson.databind.exc.MismatchedInputException;
 import tools.jackson.databind.exc.UnrecognizedPropertyException;
 
 /** Maps every failure to the uniform error body. */
@@ -30,7 +31,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(ApiException.class)
   ResponseEntity<Object> handleApi(ApiException e) {
-    return respond(e.status(), e.code(), e.getMessage(), null);
+    return respond(e.status(), e.code(), e.getMessage(), e.details());
   }
 
   @ExceptionHandler(Exception.class)
@@ -85,6 +86,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       WebRequest request) {
     if (ex.getCause() instanceof UnrecognizedPropertyException unknown) {
       return validation(List.of(new ApiError.Detail(unknown.getPropertyName(), "Unknown field.")));
+    }
+    if (ex.getCause() instanceof MismatchedInputException mismatch
+        && !mismatch.getPath().isEmpty()) {
+      String field = mismatch.getPath().get(mismatch.getPath().size() - 1).getPropertyName();
+      return validation(List.of(new ApiError.Detail(field, "Invalid value.")));
     }
     return respond(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "Malformed request body.", null);
   }
