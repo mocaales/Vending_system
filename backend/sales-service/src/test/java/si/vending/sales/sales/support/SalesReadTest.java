@@ -83,10 +83,14 @@ public abstract class SalesReadTest extends SalesApiTest {
       String state,
       String reason) {
     UUID saleId = UUID.randomUUID();
+    // a RESOLVED sale always carries a full reconciliation record (CHECK in the database)
+    boolean resolved = "RESOLVED".equals(state);
     jdbc.update(
         "INSERT INTO sales (sale_id, machine_id, slot_code, product_id, quantity, unit_price_paid,"
-            + " currency, payment_method, occurred_at, inventory_state, inventory_reason)"
-            + " VALUES (?, ?, 'A1', ?, ?, ?::numeric, ?, 'CARD', ?, ?, ?)",
+            + " currency, payment_method, occurred_at, inventory_state, inventory_reason,"
+            + " resolution, note, resolved_at, resolved_by)"
+            + " VALUES (?, ?, 'A1', ?, ?, ?::numeric, ?, 'CARD', ?, ?, ?,"
+            + " ?::varchar, ?::varchar, ?::timestamptz, ?::uuid)",
         saleId,
         machineId,
         productId,
@@ -95,7 +99,11 @@ public abstract class SalesReadTest extends SalesApiTest {
         currency,
         OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC),
         state,
-        reason);
+        reason,
+        resolved ? "ADJUSTED" : null,
+        resolved ? "fixture" : null,
+        resolved ? OffsetDateTime.now(ZoneOffset.UTC) : null,
+        resolved ? OPERATOR_ID : null);
     return new Fx(
         saleId, machineId, productId, quantity, price, currency, occurredAt, state, reason);
   }
@@ -220,6 +228,13 @@ public abstract class SalesReadTest extends SalesApiTest {
     Map<String, Object> inventory = (Map<String, Object>) out.get("inventory");
     assertThat(inventory.get("state")).isEqualTo(fixture.state());
     assertThat(inventory.get("reason")).isEqualTo(fixture.reason());
-    assertThat(out.get("reconciliation")).isNull();
+    if ("RESOLVED".equals(fixture.state())) {
+      Map<String, Object> rec = (Map<String, Object>) out.get("reconciliation");
+      assertThat(rec).as("a RESOLVED fixture carries its record").isNotNull();
+      assertThat(rec.get("resolution")).isEqualTo("ADJUSTED");
+      assertThat(rec.get("resolvedBy")).isEqualTo(OPERATOR_ID);
+    } else {
+      assertThat(out.get("reconciliation")).isNull();
+    }
   }
 }

@@ -1,6 +1,7 @@
 package si.vending.sales.sales;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import si.vending.sales.core.ApiException;
 import si.vending.sales.core.Page;
+import si.vending.sales.sales.SaleDtos.ReconciliationIn;
 import si.vending.sales.sales.SaleDtos.ReconciliationState;
 import si.vending.sales.sales.SaleDtos.SaleOut;
 import si.vending.sales.sales.SaleDtos.SalesStatsOut;
@@ -42,11 +44,34 @@ public class SaleQueryService {
 
   @Transactional(readOnly = true)
   public SaleOut get(UUID saleId) {
-    return sales
-        .findById(saleId)
-        .map(SaleOut::of)
-        .orElseThrow(
-            () -> new ApiException(HttpStatus.NOT_FOUND, "SALE_NOT_FOUND", "Sale not found."));
+    return sales.findById(saleId).map(SaleOut::of).orElseThrow(SaleQueryService::notFound);
+  }
+
+  /**
+   * NEEDS_RECONCILIATION to RESOLVED. The conditional UPDATE decides the winner of concurrent
+   * requests; the others then see the committed row: the same body is 200, anything else 409.
+   */
+  @Transactional
+  public SaleOut resolve(UUID saleId, ReconciliationIn in, UUID operatorId) {
+    int updated =
+        sales.resolve(
+            saleId,
+            in.resolution().name(),
+            in.note(),
+            Instant.now().truncatedTo(ChronoUnit.MICROS),
+            operatorId);
+    Sale sale = sales.findById(saleId).orElseThrow(() -> notFound());
+    if (updated == 1 || (sale.resolution() == in.resolution() && in.note().equals(sale.note()))) {
+      return SaleOut.of(sale);
+    }
+    throw new ApiException(
+        HttpStatus.CONFLICT,
+        "INVALID_STATE_TRANSITION",
+        "The sale is not waiting for reconciliation, or it was resolved differently.");
+  }
+
+  private static ApiException notFound() {
+    return new ApiException(HttpStatus.NOT_FOUND, "SALE_NOT_FOUND", "Sale not found.");
   }
 
   /** Statistics of all machines, or of one when {@code machineId} is given. */

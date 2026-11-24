@@ -207,6 +207,19 @@ class OutboxHardeningTest extends OutboxTest {
   }
 
   private void setSaleState(String saleId, String state) {
+    if ("RESOLVED".equals(state)) {
+      // RESOLVED is reachable only from NEEDS_RECONCILIATION and needs a full record
+      jdbc.update(
+          "UPDATE sales SET inventory_state = 'NEEDS_RECONCILIATION' WHERE sale_id = ?::uuid",
+          saleId);
+      jdbc.update(
+          "UPDATE sales SET inventory_state = 'RESOLVED', inventory_reason = NULL,"
+              + " resolution = 'ADJUSTED', note = 'fixture', resolved_at = now(),"
+              + " resolved_by = ?::uuid WHERE sale_id = ?::uuid",
+          OPERATOR_ID,
+          saleId);
+      return;
+    }
     jdbc.update(
         "UPDATE sales SET inventory_state = ?, inventory_reason = NULL WHERE sale_id = ?::uuid",
         state,

@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -24,6 +25,7 @@ import si.vending.sales.core.ApiError;
 import si.vending.sales.core.CallerIdentity;
 import si.vending.sales.core.Page;
 import si.vending.sales.core.PageParams;
+import si.vending.sales.sales.SaleDtos.ReconciliationIn;
 import si.vending.sales.sales.SaleDtos.ReconciliationState;
 import si.vending.sales.sales.SaleDtos.SaleEvent;
 import si.vending.sales.sales.SaleDtos.SaleOut;
@@ -172,5 +174,39 @@ public class SaleController {
   @GetMapping("/{saleId}")
   public SaleOut get(@PathVariable UUID saleId) {
     return queries.get(saleId);
+  }
+
+  @Operation(operationId = "resolveReconciliation", summary = "Close a stock mismatch")
+  @ApiResponse(responseCode = "200", description = "The sale with its reconciliation record.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "BAD_REQUEST",
+      content = @Content(schema = @Schema(implementation = ApiError.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "CALLER_NOT_ALLOWED",
+      content = @Content(schema = @Schema(implementation = ApiError.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "SALE_NOT_FOUND",
+      content = @Content(schema = @Schema(implementation = ApiError.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "INVALID_STATE_TRANSITION",
+      content = @Content(schema = @Schema(implementation = ApiError.class)))
+  @ApiResponse(
+      responseCode = "422",
+      description = "VALIDATION_ERROR",
+      content = @Content(schema = @Schema(implementation = ApiError.class)))
+  @AllowedCallers(
+      value = {},
+      operator = true)
+  @PutMapping("/{saleId}/reconciliation")
+  public SaleOut resolveReconciliation(
+      @PathVariable UUID saleId,
+      @Valid @RequestBody ReconciliationIn body,
+      HttpServletRequest request) {
+    UUID operatorId = CallerIdentity.require(request, CallerIdentity.Kind.OPERATOR).id();
+    return queries.resolve(saleId, body, operatorId);
   }
 }

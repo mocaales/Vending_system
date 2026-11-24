@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.UUID;
 import si.vending.sales.sales.SaleDtos.PaymentMethod;
 import si.vending.sales.sales.SaleDtos.ReconciliationState;
+import si.vending.sales.sales.SaleDtos.Resolution;
 
 /**
  * A stored sale. Read-only in code: rows are inserted by {@link SaleRepository#insertIfAbsent} and
@@ -59,6 +60,19 @@ public class Sale {
   @Column(name = "inventory_reason")
   private String inventoryReason;
 
+  @Enumerated(EnumType.STRING)
+  @Column(name = "resolution")
+  private Resolution resolution;
+
+  @Column(name = "note")
+  private String note;
+
+  @Column(name = "resolved_at")
+  private Instant resolvedAt;
+
+  @Column(name = "resolved_by")
+  private UUID resolvedBy;
+
   protected Sale() {}
 
   public UUID saleId() {
@@ -103,6 +117,22 @@ public class Sale {
 
   public ReconciliationState inventoryState() {
     return inventoryState;
+  }
+
+  public Resolution resolution() {
+    return resolution;
+  }
+
+  public String note() {
+    return note;
+  }
+
+  public Instant resolvedAt() {
+    return resolvedAt;
+  }
+
+  public UUID resolvedBy() {
+    return resolvedBy;
   }
 
   public String inventoryReason() {

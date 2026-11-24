@@ -38,4 +38,25 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
       @Param("paymentMethod") String paymentMethod,
       @Param("occurredAt") Instant occurredAt,
       @Param("receivedAt") Instant receivedAt);
+
+  /**
+   * Closes a sale that needs reconciliation. The WHERE clause makes the transition atomic: of
+   * concurrent requests exactly one updates the row. Returns 1 if this call resolved the sale.
+   */
+  @Transactional
+  @Modifying(clearAutomatically = true)
+  @Query(
+      value =
+          """
+          UPDATE sales SET inventory_state = 'RESOLVED', resolution = :resolution, note = :note,
+                           resolved_at = :resolvedAt, resolved_by = :resolvedBy
+          WHERE sale_id = :saleId AND inventory_state = 'NEEDS_RECONCILIATION'
+          """,
+      nativeQuery = true)
+  int resolve(
+      @Param("saleId") UUID saleId,
+      @Param("resolution") String resolution,
+      @Param("note") String note,
+      @Param("resolvedAt") Instant resolvedAt,
+      @Param("resolvedBy") UUID resolvedBy);
 }
