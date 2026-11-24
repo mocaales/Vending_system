@@ -10,11 +10,26 @@ import java.lang.annotation.Target;
  * Declares which calling services may use a route, by caller name (for example {@code gateway},
  * {@code inventory}). A route carrying this annotation requires a valid {@code X-Service-Token}.
  *
- * <p>With {@link #operator()} set, an operator identity is accepted only when the request carries
- * the gateway's {@code X-Service-Token} and a valid UUID in {@code X-Operator-Id} (set by the
- * gateway after it verified the operator JWT). The header alone never authenticates: without a
- * known token the request is 401, with another service's token the normal caller check applies, and
- * a malformed non-blank operator id with the gateway token is 401. A blank header counts as absent.
+ * <p>With {@link #operator()} or {@link #machine()} set, the gateway's token is also accepted when
+ * it carries a valid UUID in {@code X-Operator-Id} or {@code X-Machine-Id} (set by the gateway
+ * after it verified the JWT or machine key). The header alone never authenticates: without a known
+ * token the request is 401 and with another service's token the identity headers are ignored and
+ * the normal caller check applies.
+ *
+ * <p>With the gateway token:
+ *
+ * <ul>
+ *   <li>both identity headers, one of them sent more than once (also as a comma-joined list), or a
+ *       non-blank value that is not a canonical UUID: 401 UNAUTHENTICATED;
+ *   <li>an identity header of a kind the route does not accept: 403 CALLER_NOT_ALLOWED, even if
+ *       {@code gateway} is listed;
+ *   <li>no identity header (a single blank header counts as absent): the caller list decides, so
+ *       403 CALLER_NOT_ALLOWED unless {@code gateway} is listed.
+ * </ul>
+ *
+ * <p>The accepted caller is stored as {@link CallerIdentity} under {@link
+ * CallerIdentity#ATTRIBUTE}; handlers read it with {@link CallerIdentity#require}, never the
+ * headers.
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
@@ -25,4 +40,7 @@ public @interface AllowedCallers {
 
   /** Also accept operators identified by the gateway-set {@code X-Operator-Id} header. */
   boolean operator() default false;
+
+  /** Also accept machines identified by the gateway-set {@code X-Machine-Id} header. */
+  boolean machine() default false;
 }
