@@ -7,17 +7,17 @@ Statične poti (npr. `product/...`) so registrirane pred potmi z `{machine_id}`,
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Response
 from sqlalchemy.orm import Session
 
-from app.api.v1.schemas import SlotOut, SlotSet, ThresholdIn
+from app.api.v1.schemas import DecreaseIn, DecreaseOut, SlotOut, SlotSet, ThresholdIn
 from app.clients.machine import MachineClient, get_machine_client
 from app.clients.product import ProductClient, get_product_client
 from app.core.database import get_session
 from app.core.errors import COMMON_ERRORS, error_docs
 from app.core.schemas import Page, PageParams, page_params
 from app.core.security import Caller, allowed_callers
-from app.domain import stock
+from app.domain import decrease, stock
 
 router = APIRouter(prefix="/v1/inventory", tags=["Stock"], responses=error_docs(COMMON_ERRORS))
 
@@ -35,6 +35,7 @@ machine_readers = allowed_callers("gateway", "machine", operator=True)
 
 MACHINE_NOT_FOUND = {404: "`MACHINE_NOT_FOUND`."}
 SLOT_NOT_FOUND = {404: "`SLOT_NOT_FOUND`."}
+SALE_ID_CONFLICT = {409: "`SALE_ID_CONFLICT`: the same `saleId` with a different body."}
 SET_ERRORS = {
     404: "`MACHINE_NOT_FOUND` or `SLOT_NOT_FOUND` (the machine has no such slot).",
     409: "`SLOT_NOT_EMPTY`, `PRODUCT_ARCHIVED` or `MACHINE_RETIRED`.",
@@ -134,3 +135,29 @@ def set_threshold(
 def empty_slot(session: SessionDep, machine_id: UUID, slot: SlotCode) -> None:
     """Izprazni predal (premik REMOVAL); že prazen predal: 204 brez premika."""
     stock.empty_slot(session, machine_id, slot)
+
+
+@router.post(
+    "/{machine_id}/{slot}/decrease",
+    status_code=201,
+    dependencies=[Depends(allowed_callers("sales"))],
+    response_model_exclude_none=True,
+    responses={
+        200: {"model": DecreaseOut, "description": "Repeated request; the stored result."},
+        **error_docs(SLOT_NOT_FOUND | SALE_ID_CONFLICT),
+    },
+    openapi_extra={"x-callers": ["sales"]},
+)
+def decrease_stock(
+    session: SessionDep, machine_id: UUID, slot: SlotCode, body: DecreaseIn, response: Response
+) -> DecreaseOut:
+    """Samo interno: delavec outboxa Sales enkrat na saleId.
+
+    Neskladje vrne 201 z NEEDS_RECONCILIATION; zaloga se takrat ne spremeni.
+    Ponovitev z istim telesom vrne 200 s shranjenim rezultatom.
+    """
+    result, created = decrease.decrease_stock(
+        session, machine_id, slot, body.sale_id, body.product_id, body.quantity
+    )
+    response.status_code = 201 if created else 200
+    return result

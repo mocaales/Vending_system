@@ -23,7 +23,9 @@ app = FastAPI(
     version="1.0.0",
     description=(
         "Zaloga v predalih avtomatov (docs/03 §7). Poti imajo predpono `/v1`, gateway jih "
-        "izpostavi kot `/api/v1/...`. Dovoljeni klicatelji so v `x-callers`."
+        "izpostavi kot `/api/v1/...`. Dovoljeni klicatelji so v `x-callers`. Statične poti "
+        "(`movements`, `refill`, `expired`, `product/...`) so registrirane pred potmi z "
+        "`{machine_id}`."
     ),
     servers=[{"url": "/", "description": "Service-relative; paths already include `/v1`."}],
     docs_url=None,  # storitev je dosegljiva samo znotraj Compose; specifikacija je /openapi.json

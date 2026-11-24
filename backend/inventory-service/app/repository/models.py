@@ -35,6 +35,22 @@ class Movement(Base):
     product_id: Mapped[UUID]
     batch_code: Mapped[str | None] = mapped_column(String(40))
     quantity: Mapped[int]  # nastavljena, dodana, odstranjena ali prodana količina
+    sale_id: Mapped[UUID | None]  # samo pri SALE
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class Decrease(Base):
+    """Shranjen rezultat zmanjšanja po prodaji; isti saleId se ne izvede dvakrat."""
+
+    __tablename__ = "decreases"
+
+    sale_id: Mapped[UUID] = mapped_column(primary_key=True)
+    machine_id: Mapped[UUID]
+    slot: Mapped[str] = mapped_column(String(8))
+    product_id: Mapped[UUID]
+    quantity: Mapped[int]
+    result: Mapped[str] = mapped_column(String(25))  # APPLIED ali NEEDS_RECONCILIATION
+    reason: Mapped[str | None] = mapped_column(String(20))
+    quantity_after: Mapped[int]

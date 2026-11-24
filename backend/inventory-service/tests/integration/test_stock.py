@@ -3,61 +3,17 @@
 from uuid import uuid4
 
 import pytest
-from app.core.database import get_engine
-from app.repository.models import Movement
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-from tests.integration.helpers import FRONTEND_API, MACHINE, OPERATOR, SALES
-
-
-def add_machine(services, slots=("A1", "A2"), status="ACTIVE"):
-    machine_id = str(uuid4())
-    services["machines"][machine_id] = {
-        "id": machine_id,
-        "status": status,
-        "slots": [{"slotCode": code} for code in slots],
-    }
-    return machine_id
-
-
-def add_product(services, status="ACTIVE"):
-    product_id = str(uuid4())
-    services["products"][product_id] = {"id": product_id, "status": status}
-    return product_id
-
-
-def slot_body(product_id, **changes):
-    body = {
-        "productId": product_id,
-        "batchCode": "L2026-11-17",
-        "expiryDate": "2026-12-01",
-        "quantity": 8,
-        "lowStockThreshold": 2,
-    }
-    return body | changes
-
-
-def put_slot(client, machine_id, slot, body):
-    return client.put(f"/v1/inventory/{machine_id}/{slot}", json=body, headers=OPERATOR)
-
-
-def movements(machine_id):
-    with Session(get_engine()) as session:
-        rows = session.scalars(
-            select(Movement).where(Movement.machine_id == machine_id).order_by(Movement.occurred_at)
-        ).all()
-        return [(m.type, m.quantity) for m in rows]
-
-
-@pytest.fixture
-def machine_id(services):
-    return add_machine(services)
-
-
-@pytest.fixture
-def product_id(services):
-    return add_product(services)
-
+from tests.integration.helpers import (
+    FRONTEND_API,
+    MACHINE,
+    OPERATOR,
+    SALES,
+    add_machine,
+    add_product,
+    movements,
+    put_slot,
+    slot_body,
+)
 
 # --- nastavitev predala ------------------------------------------------------------------
 

@@ -74,7 +74,7 @@ def set_slot(
 
     for field, value in data.items():
         setattr(stock, field, value)
-    _add_movement(session, stock, MovementType.SET, stock.quantity)
+    add_movement(session, stock, MovementType.SET, stock.quantity)
     session.commit()
     return stock
 
@@ -86,7 +86,7 @@ def empty_slot(session: Session, machine_id: UUID, slot: str) -> None:
         return  # že prazen: 204 brez premika
 
     if stock.quantity > 0:
-        _add_movement(session, stock, MovementType.REMOVAL, stock.quantity)
+        add_movement(session, stock, MovementType.REMOVAL, stock.quantity)
     stock.product_id = None
     stock.batch_code = None
     stock.expiry_date = None
@@ -148,7 +148,13 @@ def _lock_or_create(session: Session, machine_id: UUID, slot: str) -> Slot:
     return get_slot(session, machine_id, slot, lock=True)
 
 
-def _add_movement(session: Session, stock: Slot, type: MovementType, quantity: int) -> None:
+def add_movement(
+    session: Session,
+    stock: Slot,
+    type: MovementType,
+    quantity: int,
+    sale_id: UUID | None = None,
+) -> None:
     session.add(
         Movement(
             machine_id=stock.machine_id,
@@ -157,5 +163,6 @@ def _add_movement(session: Session, stock: Slot, type: MovementType, quantity: i
             product_id=stock.product_id,
             batch_code=stock.batch_code,
             quantity=quantity,
+            sale_id=sale_id,
         )
     )

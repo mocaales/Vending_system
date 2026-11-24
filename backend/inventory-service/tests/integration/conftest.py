@@ -8,7 +8,7 @@ from app.core.database import Base, get_engine
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from testcontainers.community.postgres import PostgresContainer
-from tests.integration.helpers import SERVICE_TOKENS
+from tests.integration.helpers import SERVICE_TOKENS, add_machine, add_product
 
 
 @pytest.fixture(scope="session")
@@ -53,6 +53,18 @@ def services(client):
     client.app.dependency_overrides[get_product_client] = lambda: products
     yield fake
     client.app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def machine_id(services):
+    """Avtomat s predaloma A1 in A2, ki ga pozna lažni Machine."""
+    return add_machine(services)
+
+
+@pytest.fixture
+def product_id(services):
+    """Aktiven izdelek, ki ga pozna lažni Product."""
+    return add_product(services)
 
 
 @pytest.fixture(autouse=True)
