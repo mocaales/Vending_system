@@ -162,6 +162,7 @@ Predal je `(machineId, slot)`, kjer je `slot` = `slotCode`. Prazen predal nima i
 
 - `SlotSet`: `productId`, `batchCode`, `expiryDate`, `quantity` (1–1000), `lowStockThreshold`. `ThresholdIn`: `lowStockThreshold` (0–1000); odgovor je predal. `RefillIn`: `refillId`, `machineId`, `slot`, `productId`, `batchCode`, `expiryDate`, `quantity`. `DecreaseIn`: `saleId`, `productId`, `quantity`. `ExpiredOut`: `removed[{slot, productId, batchCode, quantity}]`.
 - `DecreaseOut`: `result` (`APPLIED`, `NEEDS_RECONCILIATION`), `reason?` (`PRODUCT_MISMATCH`, `INSUFFICIENT_STOCK`), `quantityAfter`. Pri neskladju je odgovor še vedno 201, zaloga se ne zmanjša, količina ni negativna ([01 §5.1](01-arhitektura.md#51-prodaja)).
+- Predal v odgovoru: `machineId`, `slot`, `productId`, `batchCode` (največ 40 znakov), `expiryDate`, `quantity`, `lowStockThreshold`; pri praznem predalu so `productId`, `batchCode` in `expiryDate` `null`. Predal, ki še ni bil nastavljen, nima zapisa (404 `SLOT_NOT_FOUND`); `GET /inventory/{machineId}` vrne samo zapise, razvrščene po `slot`. `PRODUCT_MISMATCH` velja tudi za prazen predal in ima prednost pred `INSUFFICIENT_STOCK`.
 - Premik (`type`): `SET`, `REFILL`, `REMOVAL`, `SALE`.
 - Nizka zaloga: predal z izdelkom in količino do praga je v poročilu `POST /v1/alerts` (outbox). Sprememba praga in praznjenje predala sprožita novo poročilo; predal brez izdelka v poročilu ni.
 - Statične poti (`movements`, `refill`, `expired`, `product/...`) so registrirane pred potmi z `{machineId}`.
