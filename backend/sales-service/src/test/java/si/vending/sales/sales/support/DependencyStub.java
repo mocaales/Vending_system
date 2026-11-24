@@ -37,7 +37,7 @@ public final class DependencyStub {
     UNAVAILABLE
   }
 
-  public record Call(String method, String path, String traceId) {}
+  public record Call(String method, String path, String traceId, String serviceToken) {}
 
   private final HttpServer server;
   private final String name;
@@ -76,6 +76,7 @@ public final class DependencyStub {
   public void reset() {
     mode = Mode.NORMAL;
     errorBody = null;
+    calls.clear();
   }
 
   /** Replaces the body of the 500 answer (to prove that a client never logs a dependency body). */
@@ -103,7 +104,8 @@ public final class DependencyStub {
           new Call(
               exchange.getRequestMethod(),
               path,
-              exchange.getRequestHeaders().getFirst("X-Trace-Id")));
+              exchange.getRequestHeaders().getFirst("X-Trace-Id"),
+              exchange.getRequestHeaders().getFirst("X-Service-Token")));
       switch (mode) {
         case SERVER_ERROR ->
             reply(
