@@ -15,6 +15,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -25,6 +26,9 @@ public final class SaleDtos {
 
   /** Earliest accepted {@code occurredAt}; the one place this bound is stated. */
   public static final Instant OCCURRED_AT_MIN = Instant.parse("2020-01-01T00:00:00Z");
+
+  /** Latest accepted time in the read filters {@code from} and {@code to}, inclusive. */
+  public static final Instant TIME_MAX = Instant.parse("2100-01-01T00:00:00Z");
 
   private SaleDtos() {}
 
@@ -114,4 +118,11 @@ public final class SaleDtos {
           null);
     }
   }
+
+  /** Sales of one currency in a window; {@code turnover} is a decimal string with two decimals. */
+  public record Totals(String currency, long salesCount, long quantity, String turnover) {}
+
+  public record TopProduct(UUID productId, long quantity, String turnover) {}
+
+  public record SalesStatsOut(List<Totals> totals, List<TopProduct> topProducts) {}
 }

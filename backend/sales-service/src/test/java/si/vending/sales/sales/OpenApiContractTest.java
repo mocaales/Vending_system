@@ -41,6 +41,41 @@ class OpenApiContractTest extends AbstractApiTest {
         + new TreeSet<>(responses.keySet()).stream().filter(c -> !c.equals("default")).toList();
   }
 
+  /** "METHOD path operationId [codes]" of one operation, or a "no ..." marker. */
+  @SuppressWarnings("unchecked")
+  private static String operation(Map<String, Object> spec, String path, String method) {
+    Map<String, Map<String, Object>> paths = (Map<String, Map<String, Object>>) spec.get("paths");
+    Map<String, Object> item = paths == null ? null : paths.get(path);
+    Map<String, Object> op = item == null ? null : (Map<String, Object>) item.get(method);
+    if (op == null) {
+      return "no " + method.toUpperCase() + " " + path;
+    }
+    Map<String, Object> responses = (Map<String, Object>) op.get("responses");
+    return method.toUpperCase()
+        + " "
+        + path
+        + " "
+        + op.get("operationId")
+        + " "
+        + new TreeSet<>(responses.keySet()).stream().filter(c -> !c.equals("default")).toList();
+  }
+
+  /** #27 criterion: the four read operations are documented at runtime as in the committed file. */
+  @Test
+  void runtimeSpecDocumentsTheReadOperationsLikeTheCommittedFile() throws IOException {
+    Map<String, Object> runtime = get("/openapi.json").json();
+    Map<String, Object> committed = committed();
+
+    for (String path :
+        new String[] {
+          "/v1/sales", "/v1/sales/{saleId}", "/v1/sales/stats", "/v1/sales/stats/{machineId}"
+        }) {
+      String expected = operation(committed, path, "get");
+      assertThat(expected).as("committed " + path).doesNotStartWith("no ");
+      assertThat(operation(runtime, path, "get")).isEqualTo(expected);
+    }
+  }
+
   @Test
   void runtimeSpecDocumentsTheSameIntakeOperationAsTheCommittedFile() throws IOException {
     Map<String, Object> runtime = get("/openapi.json").json();

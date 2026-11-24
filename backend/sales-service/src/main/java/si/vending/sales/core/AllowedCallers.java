@@ -21,8 +21,10 @@ import java.lang.annotation.Target;
  * <ul>
  *   <li>both identity headers, one of them sent more than once (also as a comma-joined list), or a
  *       non-blank value that is not a canonical UUID: 401 UNAUTHENTICATED;
- *   <li>no identity header of a kind the route accepts (a single blank header counts as absent):
- *       the caller list decides, so 403 CALLER_NOT_ALLOWED unless {@code gateway} is listed.
+ *   <li>an identity header of a kind the route does not accept: 403 CALLER_NOT_ALLOWED, even if
+ *       {@code gateway} is listed;
+ *   <li>no identity header (a single blank header counts as absent): the caller list decides, so
+ *       403 CALLER_NOT_ALLOWED unless {@code gateway} is listed.
  * </ul>
  *
  * <p>The accepted caller is stored as {@link CallerIdentity} under {@link
