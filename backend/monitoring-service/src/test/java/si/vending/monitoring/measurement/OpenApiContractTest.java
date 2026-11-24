@@ -14,9 +14,9 @@ import org.yaml.snakeyaml.Yaml;
 import si.vending.monitoring.core.support.AbstractApiTest;
 
 /**
- * #23 criterion: the committed {@code openapi.yaml} equals the runtime {@code /openapi.json} for
- * the measurement, status and threshold operations (method + path, {@code operationId}, documented
- * response codes). Later issues extend {@link #inScope}.
+ * #23 and #25 criterion: the committed {@code openapi.yaml} equals the runtime {@code
+ * /openapi.json} for the measurement, status, threshold and alert operations (method + path, {@code
+ * operationId}, documented response codes). Later issues extend {@link #inScope}.
  */
 class OpenApiContractTest extends AbstractApiTest {
 
@@ -33,7 +33,10 @@ class OpenApiContractTest extends AbstractApiTest {
     return path.equals("/v1/measurements")
         || path.equals("/v1/measurements/{machineId}")
         || path.equals("/v1/monitoring/{machineId}/status")
-        || path.equals("/v1/thresholds/{machineId}");
+        || path.equals("/v1/thresholds/{machineId}")
+        || path.equals("/v1/alerts")
+        || path.equals("/v1/alerts/{id}/acknowledgement")
+        || path.equals("/v1/alerts/{id}/resolution");
   }
 
   @SuppressWarnings("unchecked")
@@ -58,11 +61,11 @@ class OpenApiContractTest extends AbstractApiTest {
   }
 
   @Test
-  void runtimeSpecHasAllMeasurementStatusAndThresholdOperationsOfTheCommittedFile()
+  void runtimeSpecHasAllMeasurementStatusThresholdAndAlertOperationsOfTheCommittedFile()
       throws IOException {
     Map<String, Object> runtime = get("/openapi.json").json();
 
-    assertThat(operations(committed(), false)).hasSize(7);
+    assertThat(operations(committed(), false)).hasSize(11);
     assertThat(operations(runtime, false)).isEqualTo(operations(committed(), false));
   }
 
