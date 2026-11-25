@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 import path from "path";
-import OpenApiValidator from "express-openapi-validator";
+import * as OpenApiValidator from "express-openapi-validator";
 import { Pool } from "pg";
 import { traceIdMiddleware } from "./core/trace";
 import { errorHandler } from "./core/errors";
