@@ -1,0 +1,9 @@
+node_modules/
+dist/
+tests/
+*.test.ts
+.eslintrc*
+eslint.config*
+.prettierrc
+.prettierignore
+vitest.config.ts

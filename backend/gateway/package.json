@@ -1,0 +1,39 @@
+{
+  "name": "gateway",
+  "version": "0.1.0",
+  "description": "API Gateway for Vending System",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write .",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "express-openapi-validator": "^5.4.6",
+    "pg": "^8.14.1",
+    "node-pg-migrate": "^7.9.1",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.21",
+    "@types/pg": "^8.11.14",
+    "@types/uuid": "^10.0.0",
+    "@types/supertest": "^6.0.3",
+    "typescript": "^5.8.3",
+    "eslint": "^9.26.0",
+    "@eslint/js": "^9.26.0",
+    "typescript-eslint": "^8.32.1",
+    "prettier": "^3.5.3",
+    "vitest": "^3.1.4",
+    "supertest": "^7.1.0",
+    "@testcontainers/postgresql": "^10.24.2"
+  }
+}

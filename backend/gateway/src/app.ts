@@ -1,0 +1,37 @@
+import express, { Request, Response } from "express";
+import path from "path";
+import OpenApiValidator from "express-openapi-validator";
+import { Pool } from "pg";
+import { traceIdMiddleware } from "./core/trace";
+import { errorHandler } from "./core/errors";
+import { createHealthRouter } from "./core/health";
+
+export const createApp = (db: Pool): express.Application => {
+  const app = express();
+
+  app.use(express.json());
+  app.use(traceIdMiddleware);
+
+  // Health routes (not in OpenAPI)
+  app.use(createHealthRouter(db));
+
+  // OpenAPI validation (only when spec exists and has paths)
+  const specPath = path.join(__dirname, "..", "openapi.yaml");
+  app.use(
+    OpenApiValidator.middleware({
+      apiSpec: specPath,
+      validateRequests: true,
+      validateResponses: false,
+    }),
+  );
+
+  // 404 for unknown routes
+  app.use((_req: Request, res: Response) => {
+    const traceId = res.getHeader("X-Trace-Id") as string;
+    res.status(404).json({ code: "NOT_FOUND", message: "Route not found", traceId });
+  });
+
+  app.use(errorHandler);
+
+  return app;
+};
