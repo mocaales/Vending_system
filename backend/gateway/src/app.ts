@@ -10,6 +10,7 @@ import { createAuthRouter } from "./auth/router";
 import { createProxyRouter } from "./proxy/router";
 import { createDeviceRouter } from "./device/router";
 import { createOperatorsRouter } from "./operators/router";
+import { createPublicRouter } from "./public/router";
 
 export const createApp = (db: Pool): express.Application => {
   const app = express();
@@ -23,6 +24,9 @@ export const createApp = (db: Pool): express.Application => {
 
   // Auth routes
   app.use(createAuthRouter(db));
+
+  // Public routes (no auth, rate limited)
+  app.use(createPublicRouter());
 
   // Operator management routes
   app.use(createOperatorsRouter(db));
