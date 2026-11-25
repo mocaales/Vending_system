@@ -63,7 +63,7 @@ describe("sanitizeHeaders", () => {
 describe("requireOperator", () => {
   it("rejects request without Authorization header", async () => {
     const res = await request.get("/api/v1/operator-only");
-    expect(res.status).toBe(404); // route not registered yet — not 401
+    expect(res.status).toBe(401);
   });
 
   it("verifyToken accepts valid token", () => {

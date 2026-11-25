@@ -15,4 +15,10 @@ export const config = {
   jwtExpiresInSeconds: parseInt(optional("JWT_TTL_MINUTES", "480"), 10) * 60,
   bootstrapEmail: optional("BOOTSTRAP_OPERATOR_EMAIL", ""),
   bootstrapPassword: optional("BOOTSTRAP_OPERATOR_PASSWORD", ""),
+  machineUrl: optional("MACHINE_URL", "http://machine-service:8000"),
+  productUrl: optional("PRODUCT_URL", "http://product-service:8000"),
+  inventoryUrl: optional("INVENTORY_URL", "http://inventory-service:8000"),
+  monitoringUrl: optional("MONITORING_URL", "http://monitoring-service:8000"),
+  salesUrl: optional("SALES_URL", "http://sales-service:8000"),
+  proxyTimeoutMs: parseInt(optional("PROXY_TIMEOUT_MS", "10000"), 10),
 };
