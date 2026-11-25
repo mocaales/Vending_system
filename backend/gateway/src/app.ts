@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import path from "path";
+import cors from "cors";
 import * as OpenApiValidator from "express-openapi-validator";
 import { Pool } from "pg";
 import { traceIdMiddleware } from "./core/trace";
@@ -16,6 +17,7 @@ import { createOperatorRouter } from "./operator/router";
 export const createApp = (db: Pool): express.Application => {
   const app = express();
 
+  app.use(cors({ origin: process.env.CORS_ORIGINS?.split(",") ?? "*", credentials: true }));
   app.use(express.json());
   app.use(traceIdMiddleware);
   app.use(sanitizeHeaders);
