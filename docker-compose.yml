@@ -261,6 +261,23 @@ services:
     mem_limit: 256m
     restart: unless-stopped
 
+  # Web UI (React + Vite). Statične datoteke streže nginx; dostopen na http://localhost:5173.
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+    ports:
+      - "127.0.0.1:5173:5173"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5173"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    mem_limit: 64m
+    restart: unless-stopped
+
   # ---------------------------------------------------------------------------
   # VZOREC (komentiran): blok komponente. Vsaka komponenta ga prekopira v svojem PR.
   # Pravila:
