@@ -1,0 +1,10 @@
+node_modules/
+dist/
+tests/
+*.test.ts
+.eslintrc*
+eslint.config*
+.prettierrc
+.prettierignore
+tsconfig.json
+vitest.config.ts

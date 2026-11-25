@@ -1,0 +1,6 @@
+openapi: "3.1.0"
+info:
+  title: Vending Gateway
+  version: "0.1.0"
+  description: API Gateway for Vending System. Auth, operator accounts and proxy routes added in later issues.
+paths: {}
