@@ -6,5 +6,4 @@ tests/
 eslint.config*
 .prettierrc
 .prettierignore
-tsconfig.json
 vitest.config.ts
