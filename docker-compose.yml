@@ -243,6 +243,7 @@ services:
     environment:
       DATABASE_URL: postgresql://gateway:${GATEWAY_DB_PASSWORD:?Nastavi GATEWAY_DB_PASSWORD v .env}@gateway-db:5432/gateway
       GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN:?Nastavi GATEWAY_SERVICE_TOKEN v .env}
+      JWT_SECRET: ${JWT_SECRET:?Nastavi JWT_SECRET v .env}
       MACHINE_URL: http://machine-service:8000
       MONITORING_URL: http://monitoring-service:8000
       PRODUCT_URL: http://product-service:8000

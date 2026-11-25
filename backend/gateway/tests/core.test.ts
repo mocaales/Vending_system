@@ -7,7 +7,7 @@ import { Pool } from "pg";
 
 let container: StartedPostgreSqlContainer;
 let db: Pool;
-let request: supertest.SuperTest<supertest.Test>;
+let request: ReturnType<typeof supertest>;
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer("postgres:17-alpine").start();

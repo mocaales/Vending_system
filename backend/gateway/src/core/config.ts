@@ -11,4 +11,6 @@ export const config = {
   nodeEnv: optional("NODE_ENV", "production"),
   databaseUrl: required("DATABASE_URL"),
   gatewayServiceToken: required("GATEWAY_SERVICE_TOKEN"),
+  jwtSecret: required("JWT_SECRET"),
+  jwtExpiresInSeconds: parseInt(optional("JWT_TTL_MINUTES", "480"), 10) * 60,
 };
