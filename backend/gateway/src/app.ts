@@ -8,6 +8,7 @@ import { createHealthRouter } from "./core/health";
 import { sanitizeHeaders } from "./core/jwt";
 import { createAuthRouter } from "./auth/router";
 import { createProxyRouter } from "./proxy/router";
+import { createDeviceRouter } from "./device/router";
 
 export const createApp = (db: Pool): express.Application => {
   const app = express();
@@ -21,6 +22,9 @@ export const createApp = (db: Pool): express.Application => {
 
   // Auth routes
   app.use(createAuthRouter(db));
+
+  // Device routes (machine key auth, no JWT)
+  app.use(createDeviceRouter());
 
   // Proxy routes (operator-protected, forwarded to backend services)
   app.use(createProxyRouter(db));
