@@ -6,6 +6,7 @@ import { traceIdMiddleware } from "./core/trace";
 import { errorHandler } from "./core/errors";
 import { createHealthRouter } from "./core/health";
 import { sanitizeHeaders } from "./core/jwt";
+import { createAuthRouter } from "./auth/router";
 
 export const createApp = (db: Pool): express.Application => {
   const app = express();
@@ -16,6 +17,9 @@ export const createApp = (db: Pool): express.Application => {
 
   // Health routes (not in OpenAPI)
   app.use(createHealthRouter(db));
+
+  // Auth routes
+  app.use(createAuthRouter(db));
 
   // OpenAPI validation (only when spec exists and has paths)
   const specPath = path.join(__dirname, "..", "openapi.yaml");
