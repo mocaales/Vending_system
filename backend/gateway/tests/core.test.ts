@@ -34,10 +34,15 @@ describe("X-Trace-Id", () => {
 });
 
 describe("Unknown routes", () => {
-  it("returns 404 with error body for unknown route", async () => {
-    const res = await request.get("/api/v1/unknown-route-xyz");
+  it("returns 404 for route outside /api/v1", async () => {
+    const res = await request.get("/totally-unknown-path-xyz");
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("NOT_FOUND");
     expect(res.body.traceId).toBeTruthy();
+  });
+
+  it("returns 401 for /api/v1/* without token (proxy requires auth)", async () => {
+    const res = await request.get("/api/v1/unknown-route-xyz");
+    expect(res.status).toBe(401);
   });
 });

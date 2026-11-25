@@ -7,6 +7,7 @@ import { errorHandler } from "./core/errors";
 import { createHealthRouter } from "./core/health";
 import { sanitizeHeaders } from "./core/jwt";
 import { createAuthRouter } from "./auth/router";
+import { createProxyRouter } from "./proxy/router";
 
 export const createApp = (db: Pool): express.Application => {
   const app = express();
@@ -20,6 +21,9 @@ export const createApp = (db: Pool): express.Application => {
 
   // Auth routes
   app.use(createAuthRouter(db));
+
+  // Proxy routes (operator-protected, forwarded to backend services)
+  app.use(createProxyRouter(db));
 
   // OpenAPI validation (only when spec exists and has paths)
   const specPath = path.join(__dirname, "..", "openapi.yaml");
