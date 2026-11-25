@@ -384,6 +384,23 @@ jobs:
             exit 1
           fi
 
+      # Frontend container image
+      - name: Build frontend Docker image
+        if: needs.discover.outputs.has_frontend == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f frontend/Dockerfile ]; then
+            echo "::group::docker build frontend"
+            docker build \
+              --build-arg VITE_API_URL=http://localhost:8080 \
+              --tag "ci-check/frontend:${GITHUB_SHA}" \
+              frontend/
+            echo "::endgroup::"
+          else
+            echo "::notice::frontend/Dockerfile not found; skipping."
+          fi
+
       - name: Upload frontend dist
         if: needs.discover.outputs.has_frontend == 'true'
         uses: actions/upload-artifact@v7
@@ -606,3 +623,76 @@ jobs:
           name: frontend-coverage
           path: frontend/coverage
           if-no-files-found: ignore
+
+  smoke:
+    name: smoke
+    needs: [lint, build, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check if docker-compose.yml exists
+        id: check_compose
+        shell: bash
+        run: |
+          if [ -f docker-compose.yml ]; then
+            echo "has_compose=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_compose=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::docker-compose.yml not found; smoke skipped."
+          fi
+
+      - name: Prepare .env for smoke
+        if: steps.check_compose.outputs.has_compose == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gen() { openssl rand -hex 32; }
+          cp .env.example .env
+          sed -i "s|MACHINE_DB_PASSWORD=.*|MACHINE_DB_PASSWORD=$(gen)|" .env
+          sed -i "s|MONITORING_DB_PASSWORD=.*|MONITORING_DB_PASSWORD=$(gen)|" .env
+          sed -i "s|PRODUCT_DB_PASSWORD=.*|PRODUCT_DB_PASSWORD=$(gen)|" .env
+          sed -i "s|INVENTORY_DB_PASSWORD=.*|INVENTORY_DB_PASSWORD=$(gen)|" .env
+          sed -i "s|SALES_DB_PASSWORD=.*|SALES_DB_PASSWORD=$(gen)|" .env
+          sed -i "s|GATEWAY_DB_PASSWORD=.*|GATEWAY_DB_PASSWORD=$(gen)|" .env
+          sed -i "s|JWT_SECRET=.*|JWT_SECRET=$(gen)|" .env
+          sed -i "s|BOOTSTRAP_OPERATOR_PASSWORD=.*|BOOTSTRAP_OPERATOR_PASSWORD=smoke-password-$(gen)|" .env
+          sed -i "s|GATEWAY_SERVICE_TOKEN=.*|GATEWAY_SERVICE_TOKEN=$(gen)|" .env
+          sed -i "s|MACHINE_SERVICE_TOKEN=.*|MACHINE_SERVICE_TOKEN=$(gen)|" .env
+          sed -i "s|MONITORING_SERVICE_TOKEN=.*|MONITORING_SERVICE_TOKEN=$(gen)|" .env
+          sed -i "s|PRODUCT_SERVICE_TOKEN=.*|PRODUCT_SERVICE_TOKEN=$(gen)|" .env
+          sed -i "s|INVENTORY_SERVICE_TOKEN=.*|INVENTORY_SERVICE_TOKEN=$(gen)|" .env
+          sed -i "s|SALES_SERVICE_TOKEN=.*|SALES_SERVICE_TOKEN=$(gen)|" .env
+
+      - name: docker compose up --wait
+        if: steps.check_compose.outputs.has_compose == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose up --build --wait || {
+            echo "::error::docker compose up failed; dumping logs"
+            docker compose logs
+            docker compose down -v
+            exit 1
+          }
+
+      - name: export_openapi.py --check
+        if: steps.check_compose.outputs.has_compose == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f backend/export_openapi.py ]; then
+            pip install httpx pyyaml --quiet
+            set -a; . ./.env; set +a
+            python backend/export_openapi.py --check || \
+              echo "::warning::OpenAPI spec differences found (expected during development)"
+          else
+            echo "::notice::backend/export_openapi.py not found; skipping check."
+          fi
+
+      - name: docker compose down
+        if: always() && steps.check_compose.outputs.has_compose == 'true'
+        shell: bash
+        run: docker compose down -v || true

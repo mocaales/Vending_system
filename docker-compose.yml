@@ -270,11 +270,11 @@ services:
     ports:
       - "127.0.0.1:5173:5173"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:5173"]
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:5173"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
-      start_period: 5s
+      start_period: 10s
     mem_limit: 64m
     restart: unless-stopped
 

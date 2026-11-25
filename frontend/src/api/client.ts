@@ -40,7 +40,14 @@ const request = async <T>(
   if (res.status === 204) return undefined as T;
 
   const data = await res.json().catch(() => ({ code: "INTERNAL_ERROR", message: res.statusText }));
-  if (!res.ok) throw new GatewayError(res.status, data as ApiError);
+  if (!res.ok) {
+    // Auto-logout on expired/revoked token
+    if (res.status === 401 && auth) {
+      sessionStorage.removeItem("accessToken");
+      window.location.href = "/login";
+    }
+    throw new GatewayError(res.status, data as ApiError);
+  }
   return data as T;
 };
 
