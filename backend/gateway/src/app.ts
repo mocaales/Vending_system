@@ -9,6 +9,7 @@ import { sanitizeHeaders } from "./core/jwt";
 import { createAuthRouter } from "./auth/router";
 import { createProxyRouter } from "./proxy/router";
 import { createDeviceRouter } from "./device/router";
+import { createOperatorsRouter } from "./operators/router";
 
 export const createApp = (db: Pool): express.Application => {
   const app = express();
@@ -22,6 +23,9 @@ export const createApp = (db: Pool): express.Application => {
 
   // Auth routes
   app.use(createAuthRouter(db));
+
+  // Operator management routes
+  app.use(createOperatorsRouter(db));
 
   // Device routes (machine key auth, no JWT)
   app.use(createDeviceRouter());
