@@ -2,5 +2,943 @@ openapi: "3.1.0"
 info:
   title: Vending Gateway
   version: "0.1.0"
-  description: API Gateway for Vending System. Auth, operator accounts and proxy routes added in later issues.
-paths: {}
+  description: >
+    API Gateway za sistem prodajnih avtomatov. Izda in preverja JWT (HS256, 8 ur).
+    Javne poti ne zahtevajo prijave. Napake: {code, message, traceId, details?}.
+
+servers:
+  - url: http://localhost:8080
+    description: Lokalni razvoj
+
+tags:
+  - name: auth
+    description: Prijava, odjava in sprememba gesla
+  - name: operators
+    description: Upravljanje računov operaterjev
+  - name: public
+    description: Javne poti (brez prijave)
+  - name: operator-views
+    description: Sestavljeni operaterski pogledi
+  - name: device
+    description: Poti naprav (simulator)
+  - name: proxy
+    description: Prehodne poti do poslovnih storitev
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    machineKey:
+      type: apiKey
+      in: header
+      name: X-Machine-Key
+
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        traceId:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              issue: { type: string }
+
+    LoginIn:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          maxLength: 128
+
+    TokenOut:
+      type: object
+      required: [accessToken, tokenType, expiresAt]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresAt:
+          type: string
+          format: date-time
+
+    OperatorOut:
+      type: object
+      required: [id, email, name, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        createdAt:
+          type: string
+          format: date-time
+        deactivatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    OperatorIn:
+      type: object
+      required: [email, name, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+
+    OperatorUpdate:
+      type: object
+      required: [email, name]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    PasswordIn:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 128
+
+    PasswordResetIn:
+      type: object
+      required: [newPassword]
+      properties:
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 128
+
+    PageOperators:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperatorOut"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    PublicMachine:
+      type: object
+      required: [id, name, address, latitude, longitude, available]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        available:
+          type: boolean
+
+    PublicMachineList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicMachine"
+        total:
+          type: integer
+
+    PublicSlot:
+      type: object
+      required: [slotCode, productId]
+      properties:
+        slotCode:
+          type: string
+        productId:
+          type: string
+          format: uuid
+
+    PublicAvailability:
+      type: object
+      required: [machineId, status, asOf]
+      properties:
+        machineId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [OK, UNAVAILABLE]
+        asOf:
+          type: string
+          format: date-time
+        slots:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/PublicSlot"
+
+    Section:
+      type: object
+      required: [status, asOf]
+      properties:
+        status:
+          type: string
+          enum: [OK, STALE, UNAVAILABLE]
+        asOf:
+          type: string
+          format: date-time
+        data:
+          type: object
+          nullable: true
+
+    DashboardOut:
+      type: object
+      required: [machines, alarms, sales]
+      properties:
+        machines:
+          $ref: "#/components/schemas/Section"
+        alarms:
+          $ref: "#/components/schemas/Section"
+        sales:
+          $ref: "#/components/schemas/Section"
+
+    MachineOverviewOut:
+      type: object
+      required: [machine, monitoring, thresholds, alarms, inventory]
+      properties:
+        machine:
+          $ref: "#/components/schemas/Section"
+        monitoring:
+          $ref: "#/components/schemas/Section"
+        thresholds:
+          $ref: "#/components/schemas/Section"
+        alarms:
+          $ref: "#/components/schemas/Section"
+        inventory:
+          $ref: "#/components/schemas/Section"
+
+    SaleEvent:
+      type: object
+      required: [saleId, machineId, slotId, productId, quantity, unitPricePaid, currency, paymentMethod, occurredAt]
+      properties:
+        saleId:
+          type: string
+          format: uuid
+        machineId:
+          type: string
+          format: uuid
+        slotId:
+          type: string
+          maxLength: 8
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 100
+        unitPricePaid:
+          type: string
+          pattern: "^\\d+(\\.\\d{1,2})?$"
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+        paymentMethod:
+          type: string
+          enum: [CASH, CARD, OTHER]
+        occurredAt:
+          type: string
+          format: date-time
+
+    MeasurementIn:
+      type: object
+      required: [measurementId, machineId, observedAt, temperatureC, doorState]
+      properties:
+        measurementId:
+          type: string
+          format: uuid
+        machineId:
+          type: string
+          format: uuid
+        observedAt:
+          type: string
+          format: date-time
+        temperatureC:
+          type: string
+        doorState:
+          type: string
+          enum: [OPEN, CLOSED]
+
+paths:
+  # ── AUTH ──────────────────────────────────────────────────────────────────
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Prijava operaterja
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginIn"
+      responses:
+        "200":
+          description: Uspešna prijava
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenOut"
+        "401":
+          description: Napačni podatki
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Preveč poskusov
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Trenutni operater
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Podatki operaterja
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorOut"
+        "401":
+          description: Ni prijavljen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/auth/password:
+    put:
+      tags: [auth]
+      summary: Sprememba lastnega gesla
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordIn"
+      responses:
+        "200":
+          description: Nov žeton po spremembi gesla
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenOut"
+        "401":
+          description: Ni prijavljen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Napačno trenutno geslo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/auth/session:
+    delete:
+      tags: [auth]
+      summary: Odjava (preklic vseh žetonov)
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Odjava uspešna
+        "401":
+          description: Ni prijavljen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── OPERATORS ─────────────────────────────────────────────────────────────
+  /api/v1/operators:
+    get:
+      tags: [operators]
+      summary: Seznam operaterjev
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Seznam operaterjev
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageOperators"
+        "401":
+          description: Ni prijavljen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      tags: [operators]
+      summary: Ustvari operaterja
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorIn"
+      responses:
+        "201":
+          description: Operater ustvarjen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorOut"
+        "409":
+          description: E-naslov je zaseden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Napačni podatki
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/operators/{id}:
+    get:
+      tags: [operators]
+      summary: Podatki operaterja
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Operater
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorOut"
+        "404":
+          description: Operater ni najden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      tags: [operators]
+      summary: Posodobi operaterja
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorUpdate"
+      responses:
+        "200":
+          description: Posodobljen operater
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorOut"
+        "404":
+          description: Operater ni najden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: E-naslov zaseden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      tags: [operators]
+      summary: Deaktiviraj operaterja
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deaktiviran
+        "404":
+          description: Operater ni najden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Ni mogoče deaktivirati
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/operators/{id}/password:
+    put:
+      tags: [operators]
+      summary: Ponastavi geslo drugemu operaterju
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetIn"
+      responses:
+        "204":
+          description: Geslo ponastavljeno
+        "404":
+          description: Operater ni najden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Ni mogoče ponastaviti
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: Napačni podatki
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── PUBLIC ────────────────────────────────────────────────────────────────
+  /api/v1/public/machines:
+    get:
+      tags: [public]
+      summary: Javni seznam avtomatov
+      responses:
+        "200":
+          description: Seznam avtomatov (brez RETIRED)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicMachineList"
+        "429":
+          description: Preveč zahtev
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/public/machines/{id}/availability:
+    get:
+      tags: [public]
+      summary: Razpoložljivost avtomata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Razpoložljivi predali (brez potekle in prazne zaloge)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicAvailability"
+        "404":
+          description: Avtomat ni najden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Preveč zahtev
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── OPERATOR VIEWS ────────────────────────────────────────────────────────
+  /api/v1/operator/dashboard:
+    get:
+      tags: [operator-views]
+      summary: Nadzorna plošča
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Sestavljeni pogled — avtomati, aktivni alarmi, današnja prodaja
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardOut"
+        "401":
+          description: Ni prijavljen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/operator/machines/{id}/overview:
+    get:
+      tags: [operator-views]
+      summary: Pregled avtomata
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Avtomat, monitoring, pragovi, alarmi, zaloga
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineOverviewOut"
+        "401":
+          description: Ni prijavljen
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Avtomat ni najden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── DEVICE ────────────────────────────────────────────────────────────────
+  /api/v1/device/sales:
+    post:
+      tags: [device]
+      summary: Sprejme prodajni dogodek od simulatorja
+      security:
+        - machineKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaleEvent"
+      responses:
+        "201":
+          description: Prodaja sprejeta
+        "200":
+          description: Podvojena prodaja (isti saleId)
+        "401":
+          description: Neveljaven ključ avtomata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Ključ ne ustreza machineId v telesu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /api/v1/device/measurements:
+    post:
+      tags: [device]
+      summary: Sprejme meritev od simulatorja
+      security:
+        - machineKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeasurementIn"
+      responses:
+        "201":
+          description: Meritev sprejeta
+        "200":
+          description: Podvojena meritev (isti measurementId)
+        "401":
+          description: Neveljaven ključ avtomata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Ključ ne ustreza machineId v telesu
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  # ── PROXY (prehod do poslovnih storitev) ─────────────────────────────────
+  /api/v1/machines:
+    get:
+      tags: [proxy]
+      summary: "→ Machine Service: seznam avtomatov"
+      security:
+        - bearerAuth: []
+      responses:
+        "200": { description: OK }
+        "401": { description: Ni prijavljen }
+        "504": { description: Upstream timeout }
+    post:
+      tags: [proxy]
+      summary: "→ Machine Service: ustvari avtomat"
+      security:
+        - bearerAuth: []
+      responses:
+        "201": { description: Ustvarjen }
+        "401": { description: Ni prijavljen }
+
+  /api/v1/machines/{id}:
+    get:
+      tags: [proxy]
+      summary: "→ Machine Service: podatki avtomata"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+        "404": { description: Ni najden }
+    put:
+      tags: [proxy]
+      summary: "→ Machine Service: posodobi avtomat"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [proxy]
+      summary: "→ Machine Service: umakni avtomat"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Umaknjen }
+
+  /api/v1/sales:
+    get:
+      tags: [proxy]
+      summary: "→ Sales Service: seznam prodaj"
+      security:
+        - bearerAuth: []
+      responses:
+        "200": { description: OK }
+
+  /api/v1/sales/stats:
+    get:
+      tags: [proxy]
+      summary: "→ Sales Service: statistika"
+      security:
+        - bearerAuth: []
+      responses:
+        "200": { description: OK }
+
+  /api/v1/products:
+    get:
+      tags: [proxy]
+      summary: "→ Product Service: seznam izdelkov"
+      security:
+        - bearerAuth: []
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [proxy]
+      summary: "→ Product Service: dodaj izdelek"
+      security:
+        - bearerAuth: []
+      responses:
+        "201": { description: Ustvarjen }
+
+  /api/v1/inventory/{machineId}:
+    get:
+      tags: [proxy]
+      summary: "→ Inventory Service: zaloga avtomata"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: machineId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+
+  /api/v1/alerts:
+    get:
+      tags: [proxy]
+      summary: "→ Monitoring Service: alarmi"
+      security:
+        - bearerAuth: []
+      responses:
+        "200": { description: OK }
+
+  /api/v1/thresholds/{machineId}:
+    get:
+      tags: [proxy]
+      summary: "→ Monitoring Service: pragovi"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: machineId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    put:
+      tags: [proxy]
+      summary: "→ Monitoring Service: nastavi pragove"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: machineId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [proxy]
+      summary: "→ Monitoring Service: ponastavi pragove"
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: machineId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Ponastavljeno }
