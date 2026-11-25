@@ -1,6 +1,7 @@
 import { config } from "./core/config";
 import { createPool } from "./core/db";
 import { createApp } from "./app";
+import { bootstrapOperator } from "./auth/service";
 import migrate from "node-pg-migrate";
 import path from "path";
 
@@ -14,6 +15,8 @@ const start = async (): Promise<void> => {
     direction: "up",
     log: (msg) => console.log("[migrate]", msg),
   });
+
+  await bootstrapOperator(db);
 
   const app = createApp(db);
 
