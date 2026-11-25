@@ -7,6 +7,9 @@ import DashboardPage from "./pages/DashboardPage";
 import MachineOverviewPage from "./pages/MachineOverviewPage";
 import MachinesPage from "./pages/MachinesPage";
 import MachineKeysPage from "./pages/MachineKeysPage";
+import OperatorsPage from "./pages/OperatorsPage";
+import ThresholdsPage from "./pages/ThresholdsPage";
+import ClosingsPage from "./pages/ClosingsPage";
 
 export default function App() {
   return (
@@ -44,6 +47,30 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <MachineKeysPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/operators"
+            element={
+              <ProtectedRoute>
+                <OperatorsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/machines/:id/thresholds"
+            element={
+              <ProtectedRoute>
+                <ThresholdsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/closings"
+            element={
+              <ProtectedRoute>
+                <ClosingsPage />
               </ProtectedRoute>
             }
           />
