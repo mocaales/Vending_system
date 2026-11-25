@@ -20,6 +20,9 @@ const BLOCKED: { method: string; pattern: RegExp }[] = [
   { method: "POST", pattern: /^\/v1\/inventory\/[^/]+\/[^/]+\/decrease$/ },
   { method: "GET", pattern: /^\/v1\/machines\/internal\// },
   { method: "*", pattern: /^\/v1\/device\// },
+  // Device-only write paths — operators may only read these
+  { method: "POST", pattern: /^\/v1\/sales$/ },
+  { method: "POST", pattern: /^\/v1\/measurements$/ },
 ];
 
 export const isBlocked = (method: string, upstreamPath: string): boolean =>
