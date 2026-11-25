@@ -5,6 +5,8 @@ import LoginPage from "./pages/LoginPage";
 import MapPage from "./pages/MapPage";
 import DashboardPage from "./pages/DashboardPage";
 import MachineOverviewPage from "./pages/MachineOverviewPage";
+import MachinesPage from "./pages/MachinesPage";
+import MachineKeysPage from "./pages/MachineKeysPage";
 
 export default function App() {
   return (
@@ -22,10 +24,26 @@ export default function App() {
             }
           />
           <Route
+            path="/machines"
+            element={
+              <ProtectedRoute>
+                <MachinesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/machines/:id"
             element={
               <ProtectedRoute>
                 <MachineOverviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/machines/:id/keys"
+            element={
+              <ProtectedRoute>
+                <MachineKeysPage />
               </ProtectedRoute>
             }
           />
