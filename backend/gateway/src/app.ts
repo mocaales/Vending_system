@@ -5,12 +5,14 @@ import { Pool } from "pg";
 import { traceIdMiddleware } from "./core/trace";
 import { errorHandler } from "./core/errors";
 import { createHealthRouter } from "./core/health";
+import { sanitizeHeaders } from "./core/jwt";
 
 export const createApp = (db: Pool): express.Application => {
   const app = express();
 
   app.use(express.json());
   app.use(traceIdMiddleware);
+  app.use(sanitizeHeaders);
 
   // Health routes (not in OpenAPI)
   app.use(createHealthRouter(db));
