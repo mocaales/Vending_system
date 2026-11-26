@@ -28,3 +28,15 @@ docker compose down -v          # ustavi in izbriše tudi podatke baz
 ```
 
 Mailpit (prejete e-pošte alarmov): http://localhost:8025. Baze in storitve od zunaj niso dosegljive.
+
+## Začetni podatki
+
+Ko sklad teče, iz korena repozitorija:
+
+```bash
+pip install httpx                # enkrat
+set -a; . ./.env; set +a         # BOOTSTRAP_OPERATOR_EMAIL in BOOTSTRAP_OPERATOR_PASSWORD v lupino
+python backend/seed.py           # kategorije, izdelki, avtomati in zaloga prek gatewaya
+```
+
+Ključi avtomatov za simulator so v `backend/simulator/machines.local.json` (ni v gitu). Ponoven zagon ne ustvari podvojenih zapisov in ne spremeni že nastavljenih predalov. Gateway privzeto kliče na `http://localhost:8080` (drugače `GATEWAY_URL`).
