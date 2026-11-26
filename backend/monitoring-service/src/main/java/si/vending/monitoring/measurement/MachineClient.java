@@ -4,6 +4,7 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,6 +142,32 @@ public class MachineClient {
       offset += PAGE_SIZE;
     }
     throw new DependencyUnavailableException("Machine service returned too many machines.");
+  }
+
+  /**
+   * The machine's display name for e-mails; empty if Machine does not answer or has no name (the
+   * caller falls back to the id, a mail is never held back).
+   */
+  public Optional<String> name(UUID machineId) {
+    try {
+      JsonNode body =
+          client
+              .get()
+              .uri("/v1/machines/{id}", machineId)
+              .headers(this::addHeaders)
+              .retrieve()
+              .body(JsonNode.class);
+      JsonNode name = body == null ? null : body.get("name");
+      return name != null && name.isString() && !name.asString().isBlank()
+          ? Optional.of(name.asString())
+          : Optional.empty();
+    } catch (RestClientException e) {
+      LOG.warn(
+          "Machine name lookup failed: error={} traceId={}",
+          e.getMostSpecificCause().getClass().getSimpleName(),
+          MDC.get(TraceIdFilter.MDC_KEY));
+      return Optional.empty();
+    }
   }
 
   private void addHeaders(org.springframework.http.HttpHeaders headers) {
