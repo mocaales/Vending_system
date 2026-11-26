@@ -54,3 +54,14 @@ python -m simulator --offline-after 60 --offline-for 400          # izguba povez
 ```
 
 Neposlane dogodke (503, 504, gateway ni dosegljiv) ponavlja z istim ID-jem, dokler ne dobi 2xx. Vsi parametri: `python -m simulator --help`; enako se nastavijo z okoljem (`SIM_TEMPERATURE`, `SIM_DOOR`, `SIM_SALE_EVERY`, ...).
+
+## Smoke test
+
+Glavni tok od prijave do alarma samo prek gatewaya (tudi opravilo `smoke` v CI):
+
+```bash
+set -a; . ./.env; set +a
+python backend/smoke_test.py     # vsak korak izpiše OK; ob napaki FAIL <korak> in koda 1
+```
+
+Ustvari svoj avtomat in izdelek z enoličnim imenom, zato se lahko zažene večkrat; na koncu avtomat izprazni in umakne.
