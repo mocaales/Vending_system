@@ -36,6 +36,8 @@ public final class MachineStub {
   private final Set<String> machines = ConcurrentHashMap.newKeySet();
   private final Map<String, Mode> modes = new ConcurrentHashMap<>();
   private volatile String errorBody;
+  private volatile Set<String> listOnly;
+  private volatile boolean listFails;
   private final List<Call> calls = Collections.synchronizedList(new ArrayList<>());
 
   private MachineStub(HttpServer server) {
@@ -47,6 +49,7 @@ public final class MachineStub {
       HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
       MachineStub stub = new MachineStub(server);
       server.createContext("/v1/machines/", stub::handle);
+      server.createContext("/v1/machines", stub::handle);
       server.setExecutor(Executors.newCachedThreadPool());
       server.start();
       return stub;
@@ -72,6 +75,16 @@ public final class MachineStub {
     this.errorBody = body;
   }
 
+  /** Limits {@code GET /v1/machines} to these ids (null: every registered machine). */
+  public void restrictListTo(Set<String> ids) {
+    this.listOnly = ids;
+  }
+
+  /** Makes {@code GET /v1/machines} answer 500. */
+  public void setListFails(boolean fails) {
+    this.listFails = fails;
+  }
+
   public List<Call> calls() {
     return List.copyOf(calls);
   }
@@ -79,6 +92,10 @@ public final class MachineStub {
   private void handle(HttpExchange exchange) throws IOException {
     try {
       String path = exchange.getRequestURI().getPath();
+      if (path.equals("/v1/machines")) {
+        handleList(exchange);
+        return;
+      }
       String id = path.substring("/v1/machines/".length());
       calls.add(
           new Call(
@@ -112,6 +129,29 @@ public final class MachineStub {
     } finally {
       exchange.close();
     }
+  }
+
+  private void handleList(HttpExchange exchange) throws IOException {
+    calls.add(
+        new Call(
+            exchange.getRequestMethod(),
+            exchange.getRequestURI().toString(),
+            exchange.getRequestHeaders().getFirst("X-Service-Token"),
+            exchange.getRequestHeaders().getFirst("X-Trace-Id")));
+    if (listFails) {
+      reply(
+          exchange, 500, "{\"code\":\"INTERNAL_ERROR\",\"message\":\"boom\",\"traceId\":\"stub\"}");
+      return;
+    }
+    Set<String> only = listOnly;
+    List<String> ids = new ArrayList<>(only != null ? only : machines);
+    String items =
+        String.join(
+            ",", ids.stream().map(id -> "{\"id\":\"" + id + "\",\"status\":\"ACTIVE\"}").toList());
+    reply(
+        exchange,
+        200,
+        "{\"items\":[" + items + "],\"total\":" + ids.size() + ",\"limit\":200,\"offset\":0}");
   }
 
   private static void reply(HttpExchange exchange, int status, String body) throws IOException {

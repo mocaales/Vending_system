@@ -60,6 +60,43 @@ public class MeasurementRepository {
         .optional();
   }
 
+  /** Temperatures of the newest {@code n} measurements of the machine, newest first. */
+  public List<BigDecimal> latestTemperatures(UUID machineId, int n) {
+    return jdbc.sql(
+            "SELECT temperature_c FROM measurement WHERE machine_id = :machine"
+                + " ORDER BY observed_at DESC, received_at DESC LIMIT :n")
+        .param("machine", machineId)
+        .param("n", n)
+        .query(BigDecimal.class)
+        .list();
+  }
+
+  /**
+   * Start of the current uninterrupted run of OPEN measurements: the oldest OPEN observation newer
+   * than the newest CLOSED one. Empty when there is no OPEN observation in that run.
+   */
+  public Optional<Instant> openRunStart(UUID machineId) {
+    return jdbc
+        .sql(
+            """
+            SELECT min(observed_at) FROM measurement
+            WHERE machine_id = :machine AND door_state = 'OPEN'
+              AND observed_at > COALESCE(
+                  (SELECT max(observed_at) FROM measurement
+                   WHERE machine_id = :machine AND door_state = 'CLOSED'),
+                  'epoch'::timestamptz)
+            """)
+        .param("machine", machineId)
+        .query((rs, row) -> {
+          Timestamp t = rs.getTimestamp(1);
+          return t == null ? null : t.toInstant();
+        })
+        .list()
+        .stream()
+        .findFirst()
+        .flatMap(Optional::ofNullable);
+  }
+
   public long count(UUID machineId, Instant from, Instant to) {
     return jdbc.sql(
             """

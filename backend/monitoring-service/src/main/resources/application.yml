@@ -35,6 +35,12 @@ logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
 
+monitoring:
+  jobs:
+    enabled: ${MONITORING_JOBS_ENABLED:true}
+    interval: ${MONITORING_JOBS_INTERVAL:PT30S}
+    initial-delay: PT30S
+
 machine:
   base-url: ${MACHINE_URL:http://localhost:8001}
 

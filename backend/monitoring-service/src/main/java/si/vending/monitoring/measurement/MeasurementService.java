@@ -7,9 +7,12 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import si.vending.monitoring.alarm.AlarmRules;
 import si.vending.monitoring.core.ApiException;
 import si.vending.monitoring.core.Page;
 import si.vending.monitoring.measurement.MeasurementDtos.DoorState;
@@ -21,6 +24,8 @@ import si.vending.monitoring.measurement.MeasurementDtos.Reachability;
 
 @Service
 public class MeasurementService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(MeasurementService.class);
 
   static final Duration MAX_FUTURE = Duration.ofMinutes(5);
   static final Duration MAX_WINDOW = Duration.ofDays(7);
@@ -41,9 +46,14 @@ public class MeasurementService {
   private final MeasurementRepository repository;
   private final MachineClient machines;
   private final ThresholdService thresholds;
+  private final AlarmRules rules;
 
   public MeasurementService(
-      MeasurementRepository repository, MachineClient machines, ThresholdService thresholds) {
+      MeasurementRepository repository,
+      MachineClient machines,
+      ThresholdService thresholds,
+      AlarmRules rules) {
+    this.rules = rules;
     this.repository = repository;
     this.machines = machines;
     this.thresholds = thresholds;
@@ -81,6 +91,7 @@ public class MeasurementService {
     // The insert is the single arbiter: of two concurrent identical posts exactly one creates the
     // row, the other sees it taken and falls through to the comparison below.
     if (repository.insertIfAbsent(candidate)) {
+      evaluateRules(machineId);
       return new Ingested(candidate, true);
     }
     MeasurementOut stored =
@@ -94,6 +105,19 @@ public class MeasurementService {
           "This measurementId was already stored with different content.");
     }
     return new Ingested(stored, false);
+  }
+
+  /**
+   * A rule failure never fails the stored measurement; the next measurement or job tick evaluates
+   * again (the rules read the stored data, not the event).
+   */
+  private void evaluateRules(UUID machineId) {
+    try {
+      rules.onMeasurement(machineId);
+    } catch (RuntimeException e) {
+      LOG.warn(
+          "Alarm evaluation failed: machine={} error={}", machineId, e.getClass().getSimpleName());
+    }
   }
 
   @Transactional(readOnly = true)

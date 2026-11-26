@@ -94,6 +94,32 @@ public class AlertService {
     return new ReportResult("OPENED", repository.find(id, false).orElseThrow());
   }
 
+  /**
+   * The single hook where a rule opens an alarm (TEMPERATURE_HIGH, DOOR_OPEN, OFFLINE). Must run
+   * inside the caller's transaction. Returns the id of the alarm only if this call opened it, empty
+   * if an ACTIVE alarm of that type already exists; a later change (e-mail outbox, #38) enqueues
+   * its notification when the result is present, in the same transaction.
+   */
+  public Optional<UUID> openAutomatic(UUID machineId, String type, Instant now) {
+    UUID id = UUID.randomUUID();
+    return repository.openIfAbsent(id, machineId, type, now) ? Optional.of(id) : Optional.empty();
+  }
+
+  /** Resolves the ACTIVE alarm of the machine and type as AUTO; true if there was one. */
+  public boolean resolveAutomatic(UUID machineId, String type, Instant now) {
+    return repository.resolveActiveAuto(machineId, type, now);
+  }
+
+  /** Takes the per-machine evaluation lock (transaction scoped). */
+  public void lockMachine(UUID machineId) {
+    repository.lockMachine(machineId);
+  }
+
+  /** AUTO-resolves OFFLINE and DOOR_OPEN alarms of machines that are not in {@code activeIds}. */
+  public int resolveTimeAlarmsExcept(List<UUID> activeIds, Instant now) {
+    return repository.resolveTimeAlarmsExcept(activeIds, now);
+  }
+
   public Page<AlertOut> list(
       UUID machineId, String status, Boolean acknowledged, String type, int limit, int offset) {
     return tx.execute(s ->

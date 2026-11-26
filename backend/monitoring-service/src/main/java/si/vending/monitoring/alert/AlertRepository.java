@@ -100,6 +100,60 @@ public class AlertRepository {
         .update();
   }
 
+  /**
+   * Opens an alarm raised by a rule. The partial unique index on (machine, type) where ACTIVE is
+   * the arbiter: false means an ACTIVE alarm of that type already exists (also under a race).
+   */
+  public boolean openIfAbsent(UUID id, UUID machineId, String type, Instant openedAt) {
+    return jdbc.sql(
+                "INSERT INTO alert (id, machine_id, type, status, opened_at)"
+                    + " VALUES (:id, :machine, :type, 'ACTIVE', :opened)"
+                    + " ON CONFLICT (machine_id, type) WHERE status = 'ACTIVE' DO NOTHING")
+            .param("id", id)
+            .param("machine", machineId)
+            .param("type", type)
+            .param("opened", Timestamp.from(openedAt))
+            .update()
+        == 1;
+  }
+
+  /** Serializes all rule evaluations of one machine until the end of the transaction. */
+  public void lockMachine(UUID machineId) {
+    jdbc.sql("SELECT pg_advisory_xact_lock(hashtextextended(:machine, 0))")
+        .param("machine", machineId.toString())
+        .query()
+        .singleRow();
+  }
+
+  /** AUTO-resolves ACTIVE OFFLINE and DOOR_OPEN alarms of machines outside the given ids. */
+  public int resolveTimeAlarmsExcept(List<UUID> keepIds, Instant at) {
+    String except = keepIds.isEmpty() ? "" : " AND machine_id NOT IN (:ids)";
+    var statement =
+        jdbc.sql(
+                "UPDATE alert SET status = 'RESOLVED', resolved_at = :at, resolved_by = NULL,"
+                    + " resolution = 'AUTO' WHERE status = 'ACTIVE'"
+                    + " AND type IN ('OFFLINE', 'DOOR_OPEN')"
+                    + except)
+            .param("at", Timestamp.from(at));
+    if (!keepIds.isEmpty()) {
+      statement = statement.param("ids", keepIds);
+    }
+    return statement.update();
+  }
+
+  /** Resolves the ACTIVE alarm of the machine and type, if any, as AUTO. */
+  public boolean resolveActiveAuto(UUID machineId, String type, Instant at) {
+    return jdbc.sql(
+                "UPDATE alert SET status = 'RESOLVED', resolved_at = :at, resolved_by = NULL,"
+                    + " resolution = 'AUTO' WHERE machine_id = :machine AND type = :type"
+                    + " AND status = 'ACTIVE'")
+            .param("at", Timestamp.from(at))
+            .param("machine", machineId)
+            .param("type", type)
+            .update()
+        > 0;
+  }
+
   public void resolveManual(UUID alertId, Instant at, UUID operatorId, String note) {
     jdbc.sql(
             "UPDATE alert SET status = 'RESOLVED', resolved_at = :at, resolved_by = :operator,"
