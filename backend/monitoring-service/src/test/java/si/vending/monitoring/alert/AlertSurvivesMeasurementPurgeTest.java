@@ -18,8 +18,8 @@ class AlertSurvivesMeasurementPurgeTest extends AlertApiTest {
   @Test
   void purgingMeasurementsKeepsEveryAlertOfTheMachine() {
     String machine = newMachine();
-    store(machine, ago(Duration.ofDays(12)), "9.5");
-    store(machine, ago(Duration.ofDays(10)), "9.6");
+    store(machine, ago(Duration.ofDays(12)), "5.5");
+    store(machine, ago(Duration.ofDays(10)), "5.6");
     String active = seedActive(machine, "TEMPERATURE_HIGH");
     String resolved =
         seedAlert(

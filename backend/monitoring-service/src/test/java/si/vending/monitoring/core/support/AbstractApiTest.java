@@ -35,6 +35,7 @@ public abstract class AbstractApiTest {
     registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
     registry.add("spring.datasource.username", POSTGRES::getUsername);
     registry.add("spring.datasource.password", POSTGRES::getPassword);
+    registry.add("monitoring.jobs.enabled", () -> "false");
     registry.add("core.service-tokens.gateway", () -> GATEWAY_TOKEN);
     registry.add("core.service-tokens.inventory", () -> INVENTORY_TOKEN);
   }
