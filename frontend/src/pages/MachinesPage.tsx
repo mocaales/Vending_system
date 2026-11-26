@@ -1,7 +1,6 @@
 import { useEffect, useState, FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { machinesApi } from "../api/client";
-import { GatewayError } from "../api/client";
+import { machinesApi, GatewayError } from "../api/client";
 import { getErrorMessage } from "../api/errors";
 
 interface Machine {
@@ -11,6 +10,16 @@ interface Machine {
   address: string;
   status: string;
 }
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const cls =
+    status === "ACTIVE" ? "badge-active" : status === "SERVICE" ? "badge-stale" : "badge-inactive";
+  return (
+    <span className={`badge ${cls}`}>
+      {status === "ACTIVE" ? "Aktiven" : status === "SERVICE" ? "Servis" : "Umaknjen"}
+    </span>
+  );
+};
 
 export default function MachinesPage() {
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -24,9 +33,7 @@ export default function MachinesPage() {
       .list()
       .then((res) => setMachines(res.items as Machine[]))
       .catch((err) => {
-        const msg =
-          err instanceof GatewayError ? getErrorMessage(err.body.code) : "Napaka pri nalaganju.";
-        setError(msg);
+        setError(err instanceof GatewayError ? getErrorMessage(err.body.code) : "Napaka.");
       })
       .finally(() => setLoading(false));
   };
@@ -55,16 +62,16 @@ export default function MachinesPage() {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="page">
+      <div className="page-header">
         <h1>Avtomati</h1>
-        <div>
+        <nav>
           <Link to="/">← Nadzorna plošča</Link>
-          <button style={{ marginLeft: 16 }} onClick={() => setShowForm(!showForm)}>
+          <button className="primary" onClick={() => setShowForm(!showForm)}>
             + Dodaj avtomat
           </button>
-        </div>
-      </header>
+        </nav>
+      </div>
 
       {showForm && (
         <CreateMachineForm
@@ -75,49 +82,45 @@ export default function MachinesPage() {
         />
       )}
 
-      {loading && <p>Nalagam...</p>}
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {error && <div className="alert alert-error">{error}</div>}
+      {loading && <p style={{ color: "var(--text-secondary)" }}>Nalagam...</p>}
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table>
         <thead>
           <tr>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ccc" }}>Ime</th>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ccc" }}>
-              Naslov
-            </th>
-            <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ccc" }}>
-              Stanje
-            </th>
-            <th style={{ padding: 8, borderBottom: "1px solid #ccc" }}>Dejanja</th>
+            <th>Ime</th>
+            <th>Naslov</th>
+            <th>Stanje</th>
+            <th>Dejanja</th>
           </tr>
         </thead>
         <tbody>
           {machines.map((m) => (
             <tr key={m.id}>
-              <td style={{ padding: 8 }}>
+              <td>
                 <Link to={`/machines/${m.id}`}>{m.name}</Link>
               </td>
-              <td style={{ padding: 8 }}>{m.address}</td>
-              <td style={{ padding: 8 }}>{m.status}</td>
-              <td style={{ padding: 8 }}>
-                {m.status === "ACTIVE" && (
-                  <button onClick={() => handleStatus(m.id, "SERVICE")} style={{ marginRight: 8 }}>
-                    V servis
-                  </button>
-                )}
-                {m.status === "SERVICE" && (
-                  <button onClick={() => handleStatus(m.id, "ACTIVE")} style={{ marginRight: 8 }}>
-                    Aktiviraj
-                  </button>
-                )}
-                {m.status !== "RETIRED" && (
-                  <button onClick={() => handleRetire(m.id)} style={{ color: "red" }}>
-                    Umakni
-                  </button>
-                )}
-                <Link to={`/machines/${m.id}/keys`} style={{ marginLeft: 8 }}>
-                  Ključi
-                </Link>
+              <td style={{ color: "var(--text-secondary)" }}>{m.address}</td>
+              <td>
+                <StatusBadge status={m.status} />
+              </td>
+              <td>
+                <div className="flex-row">
+                  {m.status === "ACTIVE" && (
+                    <button onClick={() => handleStatus(m.id, "SERVICE")}>V servis</button>
+                  )}
+                  {m.status === "SERVICE" && (
+                    <button className="primary" onClick={() => handleStatus(m.id, "ACTIVE")}>
+                      Aktiviraj
+                    </button>
+                  )}
+                  {m.status !== "RETIRED" && (
+                    <button className="danger" onClick={() => handleRetire(m.id)}>
+                      Umakni
+                    </button>
+                  )}
+                  <Link to={`/machines/${m.id}/keys`}>Ključi</Link>
+                </div>
               </td>
             </tr>
           ))}
@@ -128,7 +131,7 @@ export default function MachinesPage() {
 }
 
 function CreateMachineForm({ onCreated }: { onCreated: () => void }) {
-  const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -144,27 +147,40 @@ function CreateMachineForm({ onCreated }: { onCreated: () => void }) {
       });
       onCreated();
     } catch (err) {
-      setFormError(err instanceof GatewayError ? getErrorMessage(err.body.code) : "Napaka.");
+      setError(err instanceof GatewayError ? getErrorMessage(err.body.code) : "Napaka.");
     }
   };
 
+  const fields = [
+    { name: "code", label: "Oznaka (npr. VM-01)" },
+    { name: "name", label: "Ime avtomata" },
+    { name: "address", label: "Naslov" },
+    { name: "latitude", label: "Zemljepisna širina" },
+    { name: "longitude", label: "Zemljepisna dolžina" },
+  ];
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ border: "1px solid #ccc", borderRadius: 8, padding: 16, marginBottom: 16 }}
-    >
-      <h3>Nov avtomat</h3>
-      {formError && <p style={{ color: "red" }}>{formError}</p>}
-      {["code", "name", "address", "latitude", "longitude"].map((field) => (
-        <div key={field} style={{ marginBottom: 8 }}>
-          <label>{field}: </label>
-          <input name={field} required style={{ width: 200 }} />
+    <div className="card" style={{ marginBottom: 24 }}>
+      <h2 style={{ marginBottom: 16 }}>Nov avtomat</h2>
+      {error && <div className="alert alert-error">{error}</div>}
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {fields.map((f) => (
+            <div key={f.name} className="form-group" style={{ margin: 0 }}>
+              <label>{f.label}</label>
+              <input name={f.name} required />
+            </div>
+          ))}
         </div>
-      ))}
-      <button type="submit">Ustvari</button>
-      <button type="button" onClick={() => onCreated()} style={{ marginLeft: 8 }}>
-        Prekliči
-      </button>
-    </form>
+        <div className="flex-row" style={{ marginTop: 16 }}>
+          <button type="submit" className="primary">
+            Ustvari
+          </button>
+          <button type="button" className="ghost" onClick={onCreated}>
+            Prekliči
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

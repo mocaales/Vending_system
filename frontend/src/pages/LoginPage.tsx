@@ -31,44 +31,60 @@ export default function LoginPage() {
   };
 
   return (
-    <main style={{ maxWidth: 360, margin: "80px auto", padding: "0 16px" }}>
-      <h1>Prijava</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="email">E-naslov</label>
-          <br />
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            style={{ width: "100%", marginBottom: 12 }}
-          />
-        </div>
-        <div>
-          <label htmlFor="password">Geslo</label>
-          <br />
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            style={{ width: "100%", marginBottom: 12 }}
-          />
-        </div>
-        {error && (
-          <p role="alert" style={{ color: "red" }}>
-            {error}
-          </p>
-        )}
-        <button type="submit" disabled={loading} style={{ width: "100%" }}>
-          {loading ? "Prijavljam..." : "Prijava"}
-        </button>
-      </form>
-    </main>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--bg)",
+      }}
+    >
+      <div className="card" style={{ width: 360, padding: 32 }}>
+        <h1 style={{ marginBottom: 4 }}>Vending System</h1>
+        <p style={{ color: "var(--text-secondary)", marginBottom: 24, fontSize: "0.875rem" }}>
+          Prijava v operaterski vmesnik
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="email">E-naslov</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              placeholder="admin@vending.local"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="password">Geslo</label>
+            <input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              placeholder="••••••••"
+            />
+          </div>
+
+          {error && <div className="alert alert-error">{error}</div>}
+
+          <button
+            type="submit"
+            className="primary"
+            disabled={loading}
+            style={{ width: "100%", padding: "10px" }}
+          >
+            {loading ? "Prijavljam..." : "Prijava"}
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }

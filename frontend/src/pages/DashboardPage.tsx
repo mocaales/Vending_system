@@ -4,8 +4,9 @@ import { operatorViewsApi, DashboardOut } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 const SectionStatus = ({ status }: { status: string }) => {
-  const color = status === "OK" ? "green" : status === "STALE" ? "orange" : "red";
-  return <span style={{ color, marginLeft: 8, fontSize: 12 }}>[{status}]</span>;
+  const cls =
+    status === "OK" ? "section-ok" : status === "STALE" ? "section-stale" : "section-unavailable";
+  return <span className={`section-status ${cls}`}>{status}</span>;
 };
 
 export default function DashboardPage() {
@@ -21,66 +22,58 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="page">
+      <div className="page-header">
         <h1>Nadzorna plošča</h1>
-        <div>
-          <span style={{ marginRight: 16 }}>{operator?.email}</span>
-          <Link to="/map" style={{ marginRight: 16 }}>
-            Javni zemljevid
-          </Link>
-          <Link to="/machines" style={{ marginRight: 16 }}>
-            Avtomati
-          </Link>
-          <Link to="/operators" style={{ marginRight: 16 }}>
-            Operaterji
-          </Link>
-          <Link to="/closings" style={{ marginRight: 16 }}>
-            Zaključki
-          </Link>
-          <button onClick={logout}>Odjava</button>
-        </div>
-      </header>
+        <nav>
+          <span style={{ color: "var(--text-secondary)", fontSize: "0.875rem" }}>
+            {operator?.email}
+          </span>
+          <Link to="/map">Zemljevid</Link>
+          <Link to="/machines">Avtomati</Link>
+          <Link to="/operators">Operaterji</Link>
+          <Link to="/closings">Zaključki</Link>
+          <button className="ghost" onClick={logout}>
+            Odjava
+          </button>
+        </nav>
+      </div>
 
-      {loading && <p>Nalagam...</p>}
+      {loading && <p style={{ color: "var(--text-secondary)" }}>Nalagam...</p>}
 
       {data && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-          <div style={{ border: "1px solid #ccc", borderRadius: 8, padding: 16 }}>
-            <h2>
-              Avtomati
-              <SectionStatus status={data.machines.status} />
-            </h2>
-            {data.machines.data ? (
-              <p>Skupaj: {data.machines.data.total}</p>
-            ) : (
-              <p style={{ color: "red" }}>Ni dosegljivo</p>
-            )}
-          </div>
-
-          <div style={{ border: "1px solid #ccc", borderRadius: 8, padding: 16 }}>
-            <h2>
-              Aktivni alarmi
-              <SectionStatus status={data.alarms.status} />
-            </h2>
-            {data.alarms.data ? (
-              <p>Skupaj: {data.alarms.data.total}</p>
-            ) : (
-              <p style={{ color: "red" }}>Ni dosegljivo</p>
-            )}
-          </div>
-
-          <div style={{ border: "1px solid #ccc", borderRadius: 8, padding: 16 }}>
-            <h2>
-              Današnja prodaja
-              <SectionStatus status={data.sales.status} />
-            </h2>
-            {data.sales.data ? (
-              <p>Podatki na voljo</p>
-            ) : (
-              <p style={{ color: "red" }}>Ni dosegljivo</p>
-            )}
-          </div>
+        <div className="grid-3">
+          {[
+            {
+              title: "Avtomati",
+              section: data.machines,
+              value: data.machines.data ? `${data.machines.data.total} skupaj` : null,
+            },
+            {
+              title: "Aktivni alarmi",
+              section: data.alarms,
+              value: data.alarms.data ? `${data.alarms.data.total} aktivnih` : null,
+            },
+            {
+              title: "Današnja prodaja",
+              section: data.sales,
+              value: data.sales.data ? "Podatki na voljo" : null,
+            },
+          ].map(({ title, section, value }) => (
+            <div key={title} className="card">
+              <h2 style={{ marginBottom: 12 }}>
+                {title}
+                <SectionStatus status={section.status} />
+              </h2>
+              {value ? (
+                <p style={{ fontSize: "1.25rem", fontWeight: 600 }}>{value}</p>
+              ) : (
+                <p style={{ color: "var(--text-secondary)", fontSize: "0.875rem" }}>
+                  Storitev ni dosegljiva
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
