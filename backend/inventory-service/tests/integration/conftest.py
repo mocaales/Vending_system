@@ -22,6 +22,7 @@ def client(database_url):
     """Prava aplikacija; ob zagonu (with) se izvedejo migracije."""
     mp = pytest.MonkeyPatch()
     mp.setenv("DATABASE_URL", database_url)
+    mp.setenv("LOW_STOCK_WORKER", "off")  # testi pošiljanje sprožijo sami (send_pending)
     for variable, token in SERVICE_TOKENS.items():
         mp.setenv(variable, token)
     from app.main import app

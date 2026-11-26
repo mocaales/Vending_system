@@ -31,3 +31,11 @@ class ServiceClient:
             raise ApiError(
                 503, "DEPENDENCY_UNAVAILABLE", f"{self.name} is not reachable."
             ) from None
+
+    def post(self, path: str, body: dict) -> int | None:
+        """POST brez dviga napake: vrne statusno kodo ali None, če storitev ni dosegljiva."""
+        try:
+            response = self.http.post(path, json=body, headers={TRACE_HEADER: current_trace_id()})
+            return response.status_code
+        except httpx.HTTPError:
+            return None

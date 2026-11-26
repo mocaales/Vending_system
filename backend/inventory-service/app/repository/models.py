@@ -3,7 +3,8 @@
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import BigInteger, DateTime, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -69,3 +70,15 @@ class Refill(Base):
     batch_code: Mapped[str] = mapped_column(String(40))
     expiry_date: Mapped[date]
     quantity: Mapped[int]
+
+
+class LowStockReport(Base):
+    """Outbox nizke zaloge: zadnje poročilo za avtomat. Delavec ga pošlje v Monitoring, dokler
+    poslana verzija (sent_version) ni enaka zadnji (version)."""
+
+    __tablename__ = "low_stock_reports"
+
+    machine_id: Mapped[UUID] = mapped_column(primary_key=True)
+    version: Mapped[int] = mapped_column(BigInteger)  # narašča ob vsaki spremembi seznama
+    slots: Mapped[list] = mapped_column(JSONB)  # [{slotCode, productId, quantity, ...}]
+    sent_version: Mapped[int] = mapped_column(BigInteger)
