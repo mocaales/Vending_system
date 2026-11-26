@@ -289,6 +289,29 @@ services:
     mem_limit: 64m
     restart: unless-stopped
 
+  # Simulator avtomatov (Python). Samo s profilom sim: docker compose --profile sim up -d simulator.
+  # Ključe avtomatov prebere iz backend/simulator/machines.local.json (ustvari ga backend/seed.py).
+  simulator:
+    build: ./backend/simulator
+    profiles: ["sim"]
+    environment:
+      GATEWAY_URL: http://gateway:8000
+      MACHINES_FILE: /data/machines.local.json
+    volumes:
+      - ./backend/simulator:/data:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+    # Zdrav, dokler zanka simulatorja osvežuje datoteko srčnega utripa (vsako sekundo).
+    healthcheck:
+      test: ["CMD", "/venv/bin/python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/simulator-heartbeat') > 30)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    mem_limit: 128m
+    restart: unless-stopped
+
   # ---------------------------------------------------------------------------
   # VZOREC (komentiran): blok komponente. Vsaka komponenta ga prekopira v svojem PR.
   # Pravila:

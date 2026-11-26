@@ -40,3 +40,17 @@ python backend/seed.py           # kategorije, izdelki, avtomati in zaloga prek 
 ```
 
 Ključi avtomatov za simulator so v `backend/simulator/machines.local.json` (ni v gitu). Ponoven zagon ne ustvari podvojenih zapisov in ne spremeni že nastavljenih predalov. Gateway privzeto kliče na `http://localhost:8080` (drugače `GATEWAY_URL`).
+
+## Simulator
+
+Po `seed.py` simulator s ključi iz `machines.local.json` pošilja meritve (vsako minuto) in prodaje prek gatewaya:
+
+```bash
+docker compose --profile sim up -d simulator       # vsi avtomati iz seed.py
+pip install -e backend/simulator                   # ali lokalno, s parametri:
+python -m simulator --machine MB-FERI --temperature 9.5           # alarm TEMPERATURE_HIGH
+python -m simulator --door OPEN                                   # alarm DOOR_OPEN
+python -m simulator --offline-after 60 --offline-for 400          # izguba povezave, alarm OFFLINE
+```
+
+Neposlane dogodke (503, 504, gateway ni dosegljiv) ponavlja z istim ID-jem, dokler ne dobi 2xx. Vsi parametri: `python -m simulator --help`; enako se nastavijo z okoljem (`SIM_TEMPERATURE`, `SIM_DOOR`, `SIM_SALE_EVERY`, ...).
