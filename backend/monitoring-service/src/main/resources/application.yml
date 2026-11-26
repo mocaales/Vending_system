@@ -18,6 +18,17 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: none
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:25}
+    properties:
+      mail.smtp.connectiontimeout: 3000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+  task:
+    scheduling:
+      pool:
+        size: 2
   jackson:
     deserialization:
       fail-on-unknown-properties: true
@@ -40,6 +51,17 @@ monitoring:
     enabled: ${MONITORING_JOBS_ENABLED:true}
     interval: ${MONITORING_JOBS_INTERVAL:PT30S}
     initial-delay: PT30S
+
+notification:
+  mail:
+    from: ${SMTP_FROM:alarmi@vending.local}
+    to: ${ALERT_EMAIL_TO:}
+  max-attempts: 8
+  base-delay: PT30S
+  interval: PT10S
+
+product-client:
+  base-url: ${PRODUCT_URL:http://localhost:8002}
 
 machine:
   base-url: ${MACHINE_URL:http://localhost:8001}

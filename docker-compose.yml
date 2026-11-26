@@ -150,8 +150,15 @@ services:
       INVENTORY_SERVICE_TOKEN: ${INVENTORY_SERVICE_TOKEN:?Nastavi INVENTORY_SERVICE_TOKEN v .env}
       MONITORING_SERVICE_TOKEN: ${MONITORING_SERVICE_TOKEN:?Nastavi MONITORING_SERVICE_TOKEN v .env}
       MACHINE_URL: http://machine-service:8000
+      PRODUCT_URL: http://product-service:8000
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-alarmi@vending.local}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-operater@vending.local}
     depends_on:
       monitoring-db:
+        condition: service_healthy
+      mailpit:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/health/ready"]

@@ -16,6 +16,7 @@ import si.vending.monitoring.measurement.MeasurementDtos.MeasurementOut;
 import si.vending.monitoring.measurement.MeasurementRepository;
 import si.vending.monitoring.measurement.ThresholdService;
 import si.vending.monitoring.measurement.ThresholdService.Thresholds;
+import si.vending.monitoring.notification.NotificationOutbox;
 
 /**
  * Alarm rules of docs/01 section 6.2 for TEMPERATURE_HIGH, DOOR_OPEN and OFFLINE.
@@ -53,13 +54,16 @@ public class AlarmRules {
   private final MeasurementRepository measurements;
   private final ThresholdService thresholds;
   private final AlertService alerts;
+  private final NotificationOutbox outbox;
   private final Clock clock;
 
   public AlarmRules(
       MeasurementRepository measurements,
       ThresholdService thresholds,
       AlertService alerts,
+      NotificationOutbox outbox,
       Clock clock) {
+    this.outbox = outbox;
     this.measurements = measurements;
     this.thresholds = thresholds;
     this.alerts = alerts;
@@ -172,14 +176,12 @@ public class AlarmRules {
 
   /**
    * The single point where a rule opens an alarm, inside the evaluation transaction. {@code opened}
-   * is present only for the call that really created the alarm: #38 enqueues the e-mail
-   * notification here.
+   * is present only for the call that really created the alarm; the e-mail notification is enqueued
+   * here, in the same transaction.
    */
   private void open(UUID machineId, String type, Instant now) {
     Optional<UUID> opened = alerts.openAutomatic(machineId, type, now);
-    if (opened.isPresent()) {
-      // hook for #38 (notification outbox): opened.get() is the new alarm id
-    }
+    opened.ifPresent(alertId -> outbox.enqueue(alertId, now));
   }
 
   private Instant now() {

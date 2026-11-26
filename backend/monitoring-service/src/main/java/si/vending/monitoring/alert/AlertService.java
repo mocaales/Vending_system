@@ -21,6 +21,7 @@ import si.vending.monitoring.alert.AlertDtos.ReportResult;
 import si.vending.monitoring.core.ApiException;
 import si.vending.monitoring.core.Page;
 import si.vending.monitoring.measurement.MachineClient;
+import si.vending.monitoring.notification.NotificationOutbox;
 import tools.jackson.databind.JsonNode;
 
 @Service
@@ -45,11 +46,16 @@ public class AlertService {
 
   private final AlertRepository repository;
   private final MachineClient machines;
+  private final NotificationOutbox outbox;
   private final TransactionTemplate tx;
 
   public AlertService(
-      AlertRepository repository, MachineClient machines, PlatformTransactionManager txManager) {
+      AlertRepository repository,
+      MachineClient machines,
+      NotificationOutbox outbox,
+      PlatformTransactionManager txManager) {
     this.repository = repository;
+    this.outbox = outbox;
     this.machines = machines;
     this.tx = new TransactionTemplate(txManager);
   }
@@ -91,14 +97,15 @@ public class AlertService {
     UUID id = UUID.randomUUID();
     repository.insertLowStock(id, machineId, now);
     repository.replaceSlots(id, report.slots());
+    outbox.enqueue(id, now);
     return new ReportResult("OPENED", repository.find(id, false).orElseThrow());
   }
 
   /**
    * The single hook where a rule opens an alarm (TEMPERATURE_HIGH, DOOR_OPEN, OFFLINE). Must run
    * inside the caller's transaction. Returns the id of the alarm only if this call opened it, empty
-   * if an ACTIVE alarm of that type already exists; a later change (e-mail outbox, #38) enqueues
-   * its notification when the result is present, in the same transaction.
+   * if an ACTIVE alarm of that type already exists; the caller enqueues the e-mail notification
+   * when the result is present, in the same transaction.
    */
   public Optional<UUID> openAutomatic(UUID machineId, String type, Instant now) {
     UUID id = UUID.randomUUID();
