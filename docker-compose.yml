@@ -92,6 +92,8 @@ services:
       POSTGRES_DB: gateway
       POSTGRES_USER: gateway
       POSTGRES_PASSWORD: ${GATEWAY_DB_PASSWORD:?Nastavi GATEWAY_DB_PASSWORD v .env}
+    ports:
+      - "127.0.0.1:5433:5432"
     volumes:
       - gateway-db-data:/var/lib/postgresql/data
     healthcheck:
@@ -254,7 +256,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Nastavi JWT_SECRET v .env}
       BOOTSTRAP_OPERATOR_EMAIL: ${BOOTSTRAP_OPERATOR_EMAIL:-admin@vending.local}
       BOOTSTRAP_OPERATOR_PASSWORD: ${BOOTSTRAP_OPERATOR_PASSWORD:?Nastavi BOOTSTRAP_OPERATOR_PASSWORD v .env}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       MACHINE_URL: http://machine-service:8000
       MONITORING_URL: http://monitoring-service:8000
       PRODUCT_URL: http://product-service:8000

@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { Pool } from "pg";
 import { ApiError } from "../core/errors";
+import { normalizeEmail } from "../core/email";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -61,35 +62,36 @@ export const getOperator = async (db: Pool, id: string) => {
 };
 
 export const createOperator = async (db: Pool, email: string, name: string, password: string) => {
-  const existing = await db.query("SELECT id FROM operators WHERE lower(email) = lower($1)", [
-    email,
-  ]);
-  if (existing.rows.length) throw new ApiError(409, "OPERATOR_EMAIL_TAKEN", "Email already taken");
-
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const { rows } = await db.query<Operator>(
-    `INSERT INTO operators (email, name, password_hash)
-     VALUES ($1, $2, $3)
-     RETURNING id, email, name, status, token_version, created_at, deactivated_at`,
-    [email.toLowerCase(), name, hash],
-  );
-  return sanitize(rows[0]);
+  try {
+    const { rows } = await db.query<Operator>(
+      `INSERT INTO operators (email, name, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING id, email, name, status, token_version, created_at, deactivated_at`,
+      [normalizeEmail(email), name, hash],
+    );
+    return sanitize(rows[0]);
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505")
+      throw new ApiError(409, "OPERATOR_EMAIL_TAKEN", "Email already taken");
+    throw err;
+  }
 };
 
 export const updateOperator = async (db: Pool, id: string, email: string, name: string) => {
-  const existing = await db.query(
-    "SELECT id FROM operators WHERE lower(email) = lower($1) AND id != $2",
-    [email, id],
-  );
-  if (existing.rows.length) throw new ApiError(409, "OPERATOR_EMAIL_TAKEN", "Email already taken");
-
-  const { rows } = await db.query<Operator>(
-    `UPDATE operators SET email = $1, name = $2 WHERE id = $3
-     RETURNING id, email, name, status, token_version, created_at, deactivated_at`,
-    [email.toLowerCase(), name, id],
-  );
-  if (!rows[0]) throw new ApiError(404, "OPERATOR_NOT_FOUND", "Operator not found");
-  return sanitize(rows[0]);
+  try {
+    const { rows } = await db.query<Operator>(
+      `UPDATE operators SET email = $1, name = $2 WHERE id = $3
+       RETURNING id, email, name, status, token_version, created_at, deactivated_at`,
+      [normalizeEmail(email), name, id],
+    );
+    if (!rows[0]) throw new ApiError(404, "OPERATOR_NOT_FOUND", "Operator not found");
+    return sanitize(rows[0]);
+  } catch (err) {
+    if ((err as { code?: string }).code === "23505")
+      throw new ApiError(409, "OPERATOR_EMAIL_TAKEN", "Email already taken");
+    throw err;
+  }
 };
 
 export const deactivateOperator = async (db: Pool, id: string, callerId: string): Promise<void> => {
@@ -97,7 +99,7 @@ export const deactivateOperator = async (db: Pool, id: string, callerId: string)
 
   const { rows } = await db.query<Operator>("SELECT id, status FROM operators WHERE id = $1", [id]);
   if (!rows[0]) throw new ApiError(404, "OPERATOR_NOT_FOUND", "Operator not found");
-  if (rows[0].status === "INACTIVE") return; // idempotent
+  if (rows[0].status === "INACTIVE") return;
 
   const { rows: activeCount } = await db.query(
     "SELECT COUNT(*)::int AS n FROM operators WHERE status = 'ACTIVE'",

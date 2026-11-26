@@ -1,13 +1,17 @@
 import jwt from "jsonwebtoken";
-import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction, RequestHandler } from "express";
 import { Pool } from "pg";
 import { config } from "./config";
 import { ApiError } from "./errors";
+import { asyncHandler } from "./asyncHandler";
 
 export interface OperatorPayload {
   sub: string;
+  name: string;
   email: string;
   tokenVersion: number;
+  iat?: number;
+  exp?: number;
 }
 
 export const signToken = (payload: OperatorPayload): string =>
@@ -18,14 +22,27 @@ export const signToken = (payload: OperatorPayload): string =>
 
 export const verifyToken = (token: string): OperatorPayload => {
   try {
-    return jwt.verify(token, config.jwtSecret, { algorithms: ["HS256"] }) as OperatorPayload;
-  } catch {
-    throw new ApiError(401, "UNAUTHENTICATED", "Invalid or expired token");
+    const decoded = jwt.verify(token, config.jwtSecret, {
+      algorithms: ["HS256"],
+    }) as OperatorPayload;
+    if (
+      !decoded.sub ||
+      !decoded.name ||
+      decoded.tokenVersion === undefined ||
+      !decoded.iat ||
+      !decoded.exp
+    ) {
+      throw new ApiError(401, "TOKEN_INVALID", "Invalid token.");
+    }
+    return decoded;
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+    if (err instanceof jwt.TokenExpiredError)
+      throw new ApiError(401, "TOKEN_EXPIRED", "Token expired.");
+    throw new ApiError(401, "TOKEN_INVALID", "Invalid token.");
   }
 };
 
-// Strips client-supplied trusted headers and adds gateway's own.
-// Must run before requireOperator so headers are clean regardless of auth outcome.
 export const sanitizeHeaders = (req: Request, _res: Response, next: NextFunction): void => {
   delete req.headers["x-operator-id"];
   delete req.headers["x-machine-id"];
@@ -33,8 +50,8 @@ export const sanitizeHeaders = (req: Request, _res: Response, next: NextFunction
   next();
 };
 
-export const requireOperator = (db: Pool) => {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const requireOperator = (db: Pool): RequestHandler =>
+  asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
     const authHeader = req.headers["authorization"];
     if (!authHeader?.startsWith("Bearer ")) {
       next(new ApiError(401, "UNAUTHENTICATED", "Missing authorization header"));
@@ -60,12 +77,11 @@ export const requireOperator = (db: Pool) => {
       operator.status !== "ACTIVE" ||
       operator.token_version !== payload.tokenVersion
     ) {
-      next(new ApiError(401, "UNAUTHENTICATED", "Token revoked or account inactive"));
+      next(new ApiError(401, "TOKEN_INVALID", "Token revoked or account inactive"));
       return;
     }
 
     req.headers["x-operator-id"] = payload.sub;
     req.headers["x-service-token"] = config.gatewayServiceToken;
     next();
-  };
-};
+  });

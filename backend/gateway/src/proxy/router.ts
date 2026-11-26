@@ -3,7 +3,8 @@ import { Pool } from "pg";
 import { requireOperator } from "../core/jwt";
 import { ApiError } from "../core/errors";
 import { config } from "../core/config";
-import { isBlocked, resolveTarget } from "./allowlist";
+import { asyncHandler } from "../core/asyncHandler";
+import { isBlocked, matchRoute, serviceUrl } from "./allowlist";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -11,12 +12,8 @@ const proxyRequest = async (
   req: Request,
   res: Response,
   next: NextFunction,
-  target: string,
+  targetUrl: string,
 ): Promise<void> => {
-  // req.path is stripped of /api/v1 by Express router.use; prepend /v1 for upstream
-  // req.url includes query string; req.path does not
-  const upstreamUrl = `${target}/v1${req.url}`;
-
   const headers: Record<string, string> = {
     "content-type": "application/json",
     "x-trace-id": res.getHeader("X-Trace-Id") as string,
@@ -24,13 +21,17 @@ const proxyRequest = async (
   };
   if (req.headers["x-operator-id"]) {
     headers["x-operator-id"] = req.headers["x-operator-id"] as string;
+    // Forward original JWT so downstream services can verify it themselves
+    if (req.headers["authorization"]) {
+      headers["authorization"] = req.headers["authorization"] as string;
+    }
   }
 
   const hasBody = !SAFE_METHODS.has(req.method) && req.body && Object.keys(req.body).length > 0;
 
   try {
-    const timeoutMs = parseInt(process.env.PROXY_TIMEOUT_MS ?? "10000", 10);
-    const upstream = await fetch(upstreamUrl, {
+    const timeoutMs = config.proxyTimeoutMs;
+    const upstream = await fetch(targetUrl, {
       method: req.method,
       headers,
       body: hasBody ? JSON.stringify(req.body) : undefined,
@@ -69,21 +70,24 @@ export const createProxyRouter = (db: Pool): Router => {
   router.use(
     "/api/v1",
     requireOperator(db),
-    async (req: Request, res: Response, next: NextFunction) => {
-      // Strip /api to get the upstream path
-      const upstreamPath = req.path === "/" ? "/v1" : `/v1${req.path}`;
+    asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+      const upstreamPath = `/v1${req.path}`;
 
       if (isBlocked(req.method, upstreamPath)) {
         return next(new ApiError(404, "NOT_FOUND", "Route not found"));
       }
 
-      const target = resolveTarget(upstreamPath);
-      if (!target) {
+      const matched = matchRoute(req.method, upstreamPath);
+      if (!matched) {
         return next(new ApiError(404, "NOT_FOUND", "Route not found"));
       }
 
-      await proxyRequest(req, res, next, target);
-    },
+      const query = req.originalUrl.includes("?")
+        ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+        : "";
+
+      await proxyRequest(req, res, next, `${serviceUrl(matched.service)}${upstreamPath}${query}`);
+    }),
   );
 
   return router;

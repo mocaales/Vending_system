@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { config } from "../core/config";
 import { signToken } from "../core/jwt";
 import { ApiError } from "../core/errors";
+import { normalizeEmail } from "../core/email";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -22,14 +23,18 @@ interface TokenOut {
 }
 
 const makeToken = (op: Operator): TokenOut => {
-  const accessToken = signToken({ sub: op.id, email: op.email, tokenVersion: op.token_version });
+  const accessToken = signToken({
+    sub: op.id,
+    name: op.name,
+    email: op.email,
+    tokenVersion: op.token_version,
+  });
   const expiresAt = new Date(Date.now() + config.jwtExpiresInSeconds * 1000).toISOString();
   return { accessToken, tokenType: "Bearer", expiresAt };
 };
 
 export const bootstrapOperator = async (db: Pool): Promise<void> => {
-  // Read at call time so tests can set env vars after module load
-  const email = process.env.BOOTSTRAP_OPERATOR_EMAIL;
+  const email = normalizeEmail(process.env.BOOTSTRAP_OPERATOR_EMAIL ?? "");
   const password = process.env.BOOTSTRAP_OPERATOR_PASSWORD;
   if (!email || !password) return;
 
@@ -45,15 +50,15 @@ export const bootstrapOperator = async (db: Pool): Promise<void> => {
 };
 
 export const login = async (db: Pool, email: string, password: string): Promise<TokenOut> => {
+  const normalized = normalizeEmail(email);
   const { rows } = await db.query<Operator>(
     "SELECT id, email, name, status, token_version, password_hash FROM operators WHERE email = $1",
-    [email],
+    [normalized],
   );
   const op = rows[0];
   const invalid = new ApiError(401, "INVALID_CREDENTIALS", "Invalid credentials");
 
   if (!op) {
-    // constant-time compare to avoid timing attacks
     await bcrypt.compare(
       password,
       "$2b$12$invalidhashfortimingnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
