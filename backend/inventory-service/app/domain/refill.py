@@ -7,6 +7,7 @@ from app.clients.machine import MachineClient
 from app.clients.product import ProductClient
 from app.core.errors import ApiError
 from app.domain.expiry import is_expired
+from app.domain.low_stock import record_low_stock
 from app.domain.stock import (
     MovementType,
     add_movement,
@@ -51,6 +52,7 @@ def refill_slot(
         stock.expiry_date = data["expiry_date"]
         stock.quantity = data["quantity"]
     add_movement(session, stock, MovementType.REFILL, data["quantity"], refill_id=data["refill_id"])
+    record_low_stock(session, data["machine_id"])
 
     session.add(Refill(**data))
     try:

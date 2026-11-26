@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.clients.machine import MachineClient
 from app.domain.expiry import is_expired
+from app.domain.low_stock import record_low_stock
 from app.domain.stock import check_machine_exists, clear_slot
 from app.repository.models import Slot
 
@@ -38,5 +39,7 @@ def remove_expired(session: Session, machine_id: UUID, machines: MachineClient) 
                 }
             )
             clear_slot(session, stock)
+    if removed:
+        record_low_stock(session, machine_id)
     session.commit()
     return removed

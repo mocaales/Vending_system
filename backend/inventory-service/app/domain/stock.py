@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.clients.machine import MachineClient
 from app.clients.product import ProductClient
 from app.core.errors import ApiError
+from app.domain.low_stock import record_low_stock
 from app.repository.models import Movement, Slot
 
 
@@ -75,6 +76,7 @@ def set_slot(
     for field, value in data.items():
         setattr(stock, field, value)
     add_movement(session, stock, MovementType.SET, stock.quantity)
+    record_low_stock(session, machine_id)
     session.commit()
     return stock
 
@@ -86,6 +88,7 @@ def empty_slot(session: Session, machine_id: UUID, slot: str) -> None:
         return  # že prazen: 204 brez premika
 
     clear_slot(session, stock)
+    record_low_stock(session, machine_id)
     session.commit()
 
 
@@ -101,9 +104,10 @@ def clear_slot(session: Session, stock: Slot) -> None:
 
 
 def set_threshold(session: Session, machine_id: UUID, slot: str, threshold: int) -> Slot:
-    """Idempotentna zamenjava praga nizke zaloge."""
+    """Idempotentna zamenjava praga nizke zaloge; nova ocena nizke zaloge."""
     stock = get_slot(session, machine_id, slot, lock=True)
     stock.low_stock_threshold = threshold
+    record_low_stock(session, machine_id)
     session.commit()
     return stock
 

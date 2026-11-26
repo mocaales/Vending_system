@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
+from app.domain.low_stock import record_low_stock
 from app.domain.stock import MovementType, add_movement, get_slot
 from app.repository.models import Decrease
 
@@ -50,6 +51,7 @@ def decrease_stock(
     else:
         stock.quantity -= quantity
         add_movement(session, stock, MovementType.SALE, quantity, sale_id=sale_id)
+        record_low_stock(session, machine_id)  # nedosegljiv Monitoring prodaje ne ustavi
 
     record = Decrease(
         sale_id=sale_id,

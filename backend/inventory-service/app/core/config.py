@@ -31,6 +31,15 @@ def product_url() -> str:
     return os.environ.get("PRODUCT_URL", "http://product-service:8000")
 
 
+def monitoring_url() -> str:
+    return os.environ.get("MONITORING_URL", "http://monitoring-service:8000")
+
+
+def low_stock_worker_enabled() -> bool:
+    """Delavec outboxa nizke zaloge teče v ozadju; testi ga izklopijo z LOW_STOCK_WORKER=off."""
+    return os.environ.get("LOW_STOCK_WORKER", "on") != "off"
+
+
 def service_tokens() -> dict[str, str]:
     """Znani žetoni klicateljev; nenastavljen (prazen) žeton se ne upošteva."""
     tokens = {}

@@ -5,15 +5,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.v1 import stock
+from app.core.config import low_stock_worker_enabled
 from app.core.database import run_migrations
 from app.core.setup import setup_core
 from app.core.trace import setup_logging
+from app.worker import start_low_stock_worker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_migrations()  # tabele ustvarijo samo migracije, ob vsakem zagonu
+    stop = start_low_stock_worker() if low_stock_worker_enabled() else None
     yield
+    if stop:
+        stop.set()
 
 
 setup_logging()
