@@ -692,6 +692,19 @@ jobs:
             echo "::notice::backend/export_openapi.py not found; skipping check."
           fi
 
+      - name: smoke_test.py
+        if: steps.check_compose.outputs.has_compose == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install httpx --quiet
+          set -a; . ./.env; set +a
+          python backend/smoke_test.py || {
+            echo "::error::smoke_test.py failed; dumping logs"
+            docker compose logs
+            exit 1
+          }
+
       - name: docker compose down
         if: always() && steps.check_compose.outputs.has_compose == 'true'
         shell: bash
