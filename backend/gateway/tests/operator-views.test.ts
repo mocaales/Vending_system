@@ -15,33 +15,33 @@ let mockServer: Server;
 let mockPort: number;
 let token: string;
 
-const MACHINE = { id: "m1", name: "Avtomat 1", status: "ACTIVE" };
+const ID_MACHINE = "00000000-0000-4000-8000-000000000001";
+const ID_UNKNOWN = "00000000-0000-4000-9999-000000000000";
+
+const MACHINE = { id: ID_MACHINE, name: "Avtomat 1", status: "ACTIVE" };
 
 beforeAll(async () => {
   const mock = express();
   mock.use(express.json());
 
-  // Machine
   mock.get("/v1/machines", (_req, res) => res.json({ items: [MACHINE], total: 1 }));
-  mock.get("/v1/machines/m1", (_req, res) => res.json(MACHINE));
-  mock.get("/v1/machines/not-found", (_req, res) =>
+  mock.get(`/v1/machines/${ID_MACHINE}`, (_req, res) => res.json(MACHINE));
+  mock.get(`/v1/machines/${ID_UNKNOWN}`, (_req, res) =>
     res.status(404).json({ code: "MACHINE_NOT_FOUND" }),
   );
 
-  // Monitoring
   mock.get("/v1/alerts", (_req, res) => res.json({ items: [], total: 0 }));
-  mock.get("/v1/monitoring/m1/status", (_req, res) =>
+  mock.get(`/v1/monitoring/${ID_MACHINE}/status`, (_req, res) =>
     res.json({ reachability: "ONLINE", lastMeasurement: null }),
   );
-  mock.get("/v1/thresholds/m1", (_req, res) => res.json({ maxTempC: "8.0", isDefault: true }));
+  mock.get(`/v1/thresholds/${ID_MACHINE}`, (_req, res) =>
+    res.json({ maxTempC: "8.0", isDefault: true }),
+  );
 
-  // Sales
   mock.get("/v1/sales/stats", (_req, res) => res.json({ totals: [], topProducts: [] }));
 
-  // Inventory
-  mock.get("/v1/inventory/m1", (_req, res) => res.json({ items: [] }));
+  mock.get(`/v1/inventory/${ID_MACHINE}`, (_req, res) => res.json({ items: [], total: 0 }));
 
-  // Offline monitoring — will not be registered, falls through to 404
   mockServer = createServer(mock);
   await new Promise<void>((resolve) => mockServer.listen(0, resolve));
   mockPort = (mockServer.address() as { port: number }).port;
@@ -119,7 +119,7 @@ describe("GET /api/v1/operator/dashboard", () => {
 
 describe("GET /api/v1/operator/machines/:id/overview", () => {
   it("returns all sections for existing machine", async () => {
-    const res = await auth(request.get("/api/v1/operator/machines/m1/overview"));
+    const res = await auth(request.get(`/api/v1/operator/machines/${ID_MACHINE}/overview`));
     expect(res.status).toBe(200);
     expect(res.body.machine).toBeDefined();
     expect(res.body.monitoring).toBeDefined();
@@ -129,27 +129,25 @@ describe("GET /api/v1/operator/machines/:id/overview", () => {
   });
 
   it("machine section has OK status and machine data", async () => {
-    const res = await auth(request.get("/api/v1/operator/machines/m1/overview"));
+    const res = await auth(request.get(`/api/v1/operator/machines/${ID_MACHINE}/overview`));
     expect(res.body.machine.status).toBe("OK");
-    expect(res.body.machine.data.id).toBe("m1");
+    expect(res.body.machine.data.id).toBe(ID_MACHINE);
   });
 
   it("returns 404 for unknown machine", async () => {
-    const res = await auth(request.get("/api/v1/operator/machines/not-found/overview"));
+    const res = await auth(request.get(`/api/v1/operator/machines/${ID_UNKNOWN}/overview`));
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("MACHINE_NOT_FOUND");
   });
 
   it("returns UNAVAILABLE section when service fails, rest still returned", async () => {
-    // Temporarily point to a non-existent port to simulate monitoring down
     const origMonUrl = process.env.MONITORING_URL;
     process.env.MONITORING_URL = "http://localhost:1";
     process.env.PROXY_TIMEOUT_MS = "200";
 
-    const res = await auth(request.get("/api/v1/operator/machines/m1/overview"));
+    const res = await auth(request.get(`/api/v1/operator/machines/${ID_MACHINE}/overview`));
     expect(res.status).toBe(200);
     expect(res.body.monitoring.status).toBe("UNAVAILABLE");
-    // machine section still OK (fetched before monitoring)
     expect(res.body.machine.status).toBe("OK");
 
     process.env.MONITORING_URL = origMonUrl;
@@ -157,7 +155,13 @@ describe("GET /api/v1/operator/machines/:id/overview", () => {
   });
 
   it("returns 401 without token", async () => {
-    const res = await request.get("/api/v1/operator/machines/m1/overview");
+    const res = await request.get(`/api/v1/operator/machines/${ID_MACHINE}/overview`);
     expect(res.status).toBe(401);
+  });
+
+  it("returns 400 for non-UUID machine id", async () => {
+    const res = await auth(request.get("/api/v1/operator/machines/not-a-uuid/overview"));
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("BAD_REQUEST");
   });
 });

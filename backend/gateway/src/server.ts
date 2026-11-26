@@ -5,6 +5,10 @@ import { bootstrapOperator } from "./auth/service";
 import migrate from "node-pg-migrate";
 import path from "path";
 
+process.on("unhandledRejection", (r) =>
+  console.error("[gateway] unhandled rejection:", r instanceof Error ? r.message : r),
+);
+
 const start = async (): Promise<void> => {
   const db = createPool(config.databaseUrl);
 

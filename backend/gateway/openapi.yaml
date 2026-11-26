@@ -57,6 +57,7 @@ components:
     LoginIn:
       type: object
       required: [email, password]
+      additionalProperties: false
       properties:
         email:
           type: string
@@ -98,13 +99,13 @@ components:
           type: string
           format: date-time
         deactivatedAt:
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
 
     OperatorIn:
       type: object
       required: [email, name, password]
+      additionalProperties: false
       properties:
         email:
           type: string
@@ -122,6 +123,7 @@ components:
     OperatorUpdate:
       type: object
       required: [email, name]
+      additionalProperties: false
       properties:
         email:
           type: string
@@ -135,6 +137,7 @@ components:
     PasswordIn:
       type: object
       required: [currentPassword, newPassword]
+      additionalProperties: false
       properties:
         currentPassword:
           type: string
@@ -146,6 +149,7 @@ components:
     PasswordResetIn:
       type: object
       required: [newPassword]
+      additionalProperties: false
       properties:
         newPassword:
           type: string
@@ -220,8 +224,7 @@ components:
           type: string
           format: date-time
         slots:
-          type: array
-          nullable: true
+          type: [array, "null"]
           items:
             $ref: "#/components/schemas/PublicSlot"
 
@@ -236,8 +239,7 @@ components:
           type: string
           format: date-time
         data:
-          type: object
-          nullable: true
+          type: [object, "null"]
 
     DashboardOut:
       type: object
@@ -268,6 +270,7 @@ components:
     SaleEvent:
       type: object
       required: [saleId, machineId, slotId, productId, quantity, unitPricePaid, currency, paymentMethod, occurredAt]
+      additionalProperties: false
       properties:
         saleId:
           type: string
@@ -301,6 +304,7 @@ components:
     MeasurementIn:
       type: object
       required: [measurementId, machineId, observedAt, temperatureC, doorState]
+      additionalProperties: false
       properties:
         measurementId:
           type: string
@@ -367,7 +371,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/OperatorOut"
         "401":
-          description: Ni prijavljen
+          description: "Ni prijavljen ali žeton ni veljaven (UNAUTHENTICATED, TOKEN_EXPIRED, TOKEN_INVALID)"
           content:
             application/json:
               schema:

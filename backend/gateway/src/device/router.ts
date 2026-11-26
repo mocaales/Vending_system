@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { config } from "../core/config";
 import { ApiError } from "../core/errors";
+import { asyncHandler } from "../core/asyncHandler";
 import { verifyMachineKey } from "./keyVerifier";
 
 const forwardToService = async (
@@ -12,7 +13,6 @@ const forwardToService = async (
 ): Promise<void> => {
   const traceId = res.getHeader("X-Trace-Id") as string;
 
-  // machineId in body must match the key
   if (req.body?.machineId && req.body.machineId !== machineId) {
     return next(new ApiError(403, "MACHINE_KEY_MISMATCH", "Machine key does not match machineId"));
   }
@@ -53,43 +53,32 @@ const forwardToService = async (
 export const createDeviceRouter = (): Router => {
   const router = Router();
 
-  router.post("/api/v1/device/sales", async (req: Request, res: Response, next: NextFunction) => {
-    const machineKey = req.headers["x-machine-key"] as string | undefined;
-    if (!machineKey) {
-      return next(new ApiError(401, "UNAUTHENTICATED", "Missing X-Machine-Key header"));
-    }
-
-    let machineId: string;
-    try {
-      const result = await verifyMachineKey(machineKey, res.getHeader("X-Trace-Id") as string);
-      machineId = result.machineId;
-    } catch (err) {
-      return next(err);
-    }
-
-    const salesUrl = process.env.SALES_URL ?? "http://sales-service:8000";
-    await forwardToService(req, res, next, `${salesUrl}/v1/sales`, machineId);
-  });
-
   router.post(
-    "/api/v1/device/measurements",
-    async (req: Request, res: Response, next: NextFunction) => {
+    "/api/v1/device/sales",
+    asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
       const machineKey = req.headers["x-machine-key"] as string | undefined;
       if (!machineKey) {
         return next(new ApiError(401, "UNAUTHENTICATED", "Missing X-Machine-Key header"));
       }
 
-      let machineId: string;
-      try {
-        const result = await verifyMachineKey(machineKey, res.getHeader("X-Trace-Id") as string);
-        machineId = result.machineId;
-      } catch (err) {
-        return next(err);
+      const result = await verifyMachineKey(machineKey, res.getHeader("X-Trace-Id") as string);
+      const salesUrl = process.env.SALES_URL ?? "http://sales-service:8000";
+      await forwardToService(req, res, next, `${salesUrl}/v1/sales`, result.machineId);
+    }),
+  );
+
+  router.post(
+    "/api/v1/device/measurements",
+    asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+      const machineKey = req.headers["x-machine-key"] as string | undefined;
+      if (!machineKey) {
+        return next(new ApiError(401, "UNAUTHENTICATED", "Missing X-Machine-Key header"));
       }
 
+      const result = await verifyMachineKey(machineKey, res.getHeader("X-Trace-Id") as string);
       const monitoringUrl = process.env.MONITORING_URL ?? "http://monitoring-service:8000";
-      await forwardToService(req, res, next, `${monitoringUrl}/v1/measurements`, machineId);
-    },
+      await forwardToService(req, res, next, `${monitoringUrl}/v1/measurements`, result.machineId);
+    }),
   );
 
   return router;

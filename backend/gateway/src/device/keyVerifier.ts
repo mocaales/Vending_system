@@ -1,5 +1,6 @@
 import { config } from "../core/config";
 import { ApiError } from "../core/errors";
+import { isUuid } from "../core/params";
 
 interface KeyVerifyResult {
   machineId: string;
@@ -35,5 +36,10 @@ export const verifyMachineKey = async (
     throw new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service error");
   }
 
-  return (await res.json()) as KeyVerifyResult;
+  const result = (await res.json()) as KeyVerifyResult;
+  if (!isUuid(result.machineId)) {
+    throw new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service returned invalid machineId");
+  }
+
+  return result;
 };

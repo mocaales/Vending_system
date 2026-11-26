@@ -1,6 +1,8 @@
 import { Router, Request, Response as ExpressResponse, NextFunction } from "express";
 import { config } from "../core/config";
 import { ApiError } from "../core/errors";
+import { asyncHandler } from "../core/asyncHandler";
+import { uuidParam, isPage, isObject } from "../core/params";
 import { checkPublicRateLimit } from "./rateLimit";
 
 const TIMEOUT_MS = () => parseInt(process.env.PROXY_TIMEOUT_MS ?? "10000", 10);
@@ -18,7 +20,6 @@ const rateLimitMiddleware = (req: Request, res: ExpressResponse, next: NextFunct
   next();
 };
 
-// Returns true if the slot's inventory is expired in Europe/Ljubljana timezone (rule B4).
 const isExpired = (expiryDate: string | null): boolean => {
   if (!expiryDate) return false;
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Ljubljana" }).format(
@@ -44,10 +45,12 @@ const fetchUpstream = async (url: string, traceId: string): Promise<globalThis.R
 export const createPublicRouter = (): Router => {
   const router = Router();
 
+  router.param("id", uuidParam);
+
   router.get(
     "/api/v1/public/machines",
     rateLimitMiddleware,
-    async (req: Request, res: ExpressResponse, next: NextFunction) => {
+    asyncHandler(async (req: Request, res: ExpressResponse, next: NextFunction) => {
       const traceId = res.getHeader("X-Trace-Id") as string;
       const upstream = await fetchUpstream(`${MACHINE_URL()}/v1/machines`, traceId);
 
@@ -58,20 +61,31 @@ export const createPublicRouter = (): Router => {
         return next(new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service error"));
       }
 
-      const data = (await upstream.json()) as {
-        items: {
+      let data: unknown;
+      try {
+        data = await upstream.json();
+      } catch {
+        return next(
+          new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service returned invalid response"),
+        );
+      }
+
+      if (!isPage(data)) {
+        return next(
+          new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service returned invalid response"),
+        );
+      }
+
+      const items = (
+        data.items as {
           id: string;
           name: string;
           address: string;
           latitude: number;
           longitude: number;
           status: string;
-        }[];
-        total: number;
-      };
-
-      // Hide RETIRED; include ACTIVE and SERVICE (SERVICE shown as unavailable)
-      const items = data.items
+        }[]
+      )
         .filter((m) => m.status !== "RETIRED")
         .map((m) => ({
           id: m.id,
@@ -83,19 +97,21 @@ export const createPublicRouter = (): Router => {
         }));
 
       res.json({ items, total: items.length });
-    },
+    }),
   );
 
   router.get(
     "/api/v1/public/machines/:id/availability",
     rateLimitMiddleware,
-    async (req: Request, res: ExpressResponse, next: NextFunction) => {
+    asyncHandler(async (req: Request, res: ExpressResponse, next: NextFunction) => {
       const traceId = res.getHeader("X-Trace-Id") as string;
-      const machineId = String(req.params.id);
+      const machineId = req.params.id;
       const asOf = new Date().toISOString();
 
-      // Verify machine exists and is not RETIRED
-      const machineRes = await fetchUpstream(`${MACHINE_URL()}/v1/machines/${machineId}`, traceId);
+      const machineRes = await fetchUpstream(
+        `${MACHINE_URL()}/v1/machines/${encodeURIComponent(machineId)}`,
+        traceId,
+      );
       if (!machineRes) {
         return next(new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service unavailable"));
       }
@@ -106,42 +122,55 @@ export const createPublicRouter = (): Router => {
         return next(new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service error"));
       }
 
-      const machine = (await machineRes.json()) as { id: string; name: string; status: string };
-      if (machine.status === "RETIRED") {
+      let machine: unknown;
+      try {
+        machine = await machineRes.json();
+      } catch {
+        return next(
+          new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service returned invalid response"),
+        );
+      }
+      if (!isObject(machine) || typeof (machine as Record<string, unknown>).status !== "string") {
+        return next(
+          new ApiError(503, "DEPENDENCY_UNAVAILABLE", "Machine service returned invalid response"),
+        );
+      }
+      if ((machine as Record<string, unknown>).status === "RETIRED") {
         return next(new ApiError(404, "MACHINE_NOT_FOUND", "Machine not found"));
       }
 
-      // Fetch inventory; if unavailable return UNAVAILABLE status (never empty list as substitute)
-      const invRes = await fetchUpstream(`${INVENTORY_URL()}/v1/inventory/${machineId}`, traceId);
+      const invRes = await fetchUpstream(
+        `${INVENTORY_URL()}/v1/inventory/${encodeURIComponent(machineId)}`,
+        traceId,
+      );
 
       if (!invRes || !invRes.ok) {
-        return res.json({
-          machineId,
-          status: "UNAVAILABLE",
-          asOf,
-          slots: null,
-        });
+        return res.json({ machineId, status: "UNAVAILABLE", asOf, slots: null });
       }
 
-      const inv = (await invRes.json()) as {
-        items: {
+      let inv: unknown;
+      try {
+        inv = await invRes.json();
+      } catch {
+        return res.json({ machineId, status: "UNAVAILABLE", asOf, slots: null });
+      }
+      if (!isPage(inv)) {
+        return res.json({ machineId, status: "UNAVAILABLE", asOf, slots: null });
+      }
+
+      const slots = (
+        inv.items as {
           slot: string;
           productId: string | null;
           expiryDate: string | null;
           quantity: number;
-        }[];
-      };
-
-      // Filter: exclude empty slots and expired inventory
-      const slots = inv.items
+        }[]
+      )
         .filter((s) => s.productId !== null && s.quantity > 0 && !isExpired(s.expiryDate))
-        .map((s) => ({
-          slotCode: s.slot,
-          productId: s.productId,
-        }));
+        .map((s) => ({ slotCode: s.slot, productId: s.productId }));
 
       res.json({ machineId, status: "OK", asOf, slots });
-    },
+    }),
   );
 
   return router;

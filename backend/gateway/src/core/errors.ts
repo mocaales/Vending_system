@@ -19,6 +19,18 @@ export class ApiError extends Error {
   }
 }
 
+const DB_DOWN = new Set([
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "57P01",
+  "57P03",
+  "08000",
+  "08001",
+  "08003",
+  "08006",
+]);
+
 export const errorHandler = (
   err: unknown,
   req: Request,
@@ -27,33 +39,66 @@ export const errorHandler = (
 ): void => {
   const traceId = res.getHeader("X-Trace-Id") as string;
 
+  const send = (
+    status: number,
+    code: string,
+    message: string,
+    details?: { field: string; issue: string }[],
+  ) => {
+    const body: ApiErrorBody = { code, message, traceId };
+    if (details?.length) body.details = details;
+    res.status(status).json(body);
+  };
+
   if (err instanceof ApiError) {
-    const body: ApiErrorBody = { code: err.code, message: err.message, traceId };
-    if (err.details) body.details = err.details;
-    res.status(err.status).json(body);
+    send(err.status, err.code, err.message, err.details);
     return;
   }
 
-  // express-openapi-validator errors
-  const validationErr = err as { status?: number; errors?: { path: string; message: string }[] };
-  if (validationErr.status === 404) {
-    res.status(404).json({ code: "NOT_FOUND", message: "Route not found", traceId });
+  const e = err as {
+    type?: string;
+    status?: number;
+    errors?: { path?: string; message: string }[];
+    code?: string;
+  };
+
+  if (e.type === "entity.parse.failed") {
+    send(400, "BAD_REQUEST", "Malformed JSON body");
     return;
   }
-  if (validationErr.status === 400 || validationErr.status === 422) {
-    const details = (validationErr.errors ?? []).map((e) => ({
-      field: e.path,
-      issue: e.message,
+  if (e.type === "entity.too.large") {
+    send(400, "BAD_REQUEST", "Request body too large");
+    return;
+  }
+
+  if (Array.isArray(e.errors) && typeof e.status === "number") {
+    if (e.status === 404 || e.status === 405) {
+      send(404, "NOT_FOUND", "Route not found");
+      return;
+    }
+    if (e.status === 415) {
+      send(400, "BAD_REQUEST", "Unsupported content type");
+      return;
+    }
+    const inPath = e.errors.some((x) => /^[./]params[./]/.test(x.path ?? ""));
+    if (inPath) {
+      send(400, "BAD_REQUEST", "Malformed path parameter");
+      return;
+    }
+    const details = e.errors.map((x) => ({
+      field: (x.path ?? "").replace(/^[./](body|query)[./]/, "").replace(/[./]/g, "."),
+      issue: x.message,
     }));
-    res.status(422).json({
-      code: "VALIDATION_ERROR",
-      message: "Request validation failed",
-      traceId,
-      details,
-    } satisfies ApiErrorBody);
+    send(422, "VALIDATION_ERROR", "Request validation failed", details);
+    return;
+  }
+
+  if (e.code && DB_DOWN.has(e.code)) {
+    console.error("[db]", e.code, (err as Error).message);
+    send(503, "DEPENDENCY_UNAVAILABLE", "Gateway database unavailable");
     return;
   }
 
   console.error("[error]", err);
-  res.status(500).json({ code: "INTERNAL_ERROR", message: "Internal server error", traceId });
+  send(500, "INTERNAL_ERROR", "Internal server error");
 };

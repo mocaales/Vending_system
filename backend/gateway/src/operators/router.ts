@@ -2,6 +2,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import { Pool } from "pg";
 import { requireOperator } from "../core/jwt";
 import { ApiError } from "../core/errors";
+import { asyncHandler } from "../core/asyncHandler";
+import { uuidParam } from "../core/params";
 import {
   listOperators,
   getOperator,
@@ -30,34 +32,32 @@ export const createOperatorsRouter = (db: Pool): Router => {
   const router = Router();
   const auth = requireOperator(db);
 
-  router.get("/api/v1/operators", auth, async (req: Request, res: Response, next: NextFunction) => {
-    try {
+  router.param("id", uuidParam);
+
+  router.get(
+    "/api/v1/operators",
+    auth,
+    asyncHandler(async (req: Request, res: Response) => {
       const { limit, offset } = parsePagination(req.query as Record<string, unknown>);
       const status = Array.isArray(req.query.status)
         ? undefined
         : (req.query.status as string | undefined);
       res.json(await listOperators(db, status, limit, offset));
-    } catch (err) {
-      next(err);
-    }
-  });
+    }),
+  );
 
   router.get(
     "/api/v1/operators/:id",
     auth,
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        res.json(await getOperator(db, String(req.params.id)));
-      } catch (err) {
-        next(err);
-      }
-    },
+    asyncHandler(async (req: Request, res: Response) => {
+      res.json(await getOperator(db, req.params.id));
+    }),
   );
 
   router.post(
     "/api/v1/operators",
     auth,
-    async (req: Request, res: Response, next: NextFunction) => {
+    asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
       const { email, name, password } = req.body ?? {};
       if (!email || !name || !password) {
         return next(
@@ -68,20 +68,16 @@ export const createOperatorsRouter = (db: Pool): Router => {
           ]),
         );
       }
-      try {
-        validatePassword(password);
-        const operator = await createOperator(db, String(email), String(name), String(password));
-        res.status(201).json(operator);
-      } catch (err) {
-        next(err);
-      }
-    },
+      validatePassword(password);
+      const operator = await createOperator(db, String(email), String(name), String(password));
+      res.status(201).json(operator);
+    }),
   );
 
   router.put(
     "/api/v1/operators/:id",
     auth,
-    async (req: Request, res: Response, next: NextFunction) => {
+    asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
       const { email, name } = req.body ?? {};
       if (!email || !name) {
         return next(
@@ -91,31 +87,23 @@ export const createOperatorsRouter = (db: Pool): Router => {
           ]),
         );
       }
-      try {
-        res.json(await updateOperator(db, String(req.params.id), String(email), String(name)));
-      } catch (err) {
-        next(err);
-      }
-    },
+      res.json(await updateOperator(db, req.params.id, String(email), String(name)));
+    }),
   );
 
   router.delete(
     "/api/v1/operators/:id",
     auth,
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        await deactivateOperator(db, String(req.params.id), req.headers["x-operator-id"] as string);
-        res.status(204).send();
-      } catch (err) {
-        next(err);
-      }
-    },
+    asyncHandler(async (req: Request, res: Response) => {
+      await deactivateOperator(db, req.params.id, req.headers["x-operator-id"] as string);
+      res.status(204).send();
+    }),
   );
 
   router.put(
     "/api/v1/operators/:id/password",
     auth,
-    async (req: Request, res: Response, next: NextFunction) => {
+    asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
       const { newPassword } = req.body ?? {};
       if (!newPassword) {
         return next(
@@ -124,19 +112,15 @@ export const createOperatorsRouter = (db: Pool): Router => {
           ]),
         );
       }
-      try {
-        validatePassword(newPassword, "newPassword");
-        await resetOperatorPassword(
-          db,
-          String(req.params.id),
-          req.headers["x-operator-id"] as string,
-          String(newPassword),
-        );
-        res.status(204).send();
-      } catch (err) {
-        next(err);
-      }
-    },
+      validatePassword(newPassword, "newPassword");
+      await resetOperatorPassword(
+        db,
+        req.params.id,
+        req.headers["x-operator-id"] as string,
+        String(newPassword),
+      );
+      res.status(204).send();
+    }),
   );
 
   return router;
