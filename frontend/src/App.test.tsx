@@ -6,7 +6,7 @@ describe("App", () => {
   it("redirects unauthenticated user to login", () => {
     sessionStorage.clear();
     render(<App />);
-    expect(screen.getByRole("heading", { name: /prijava/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /vending system/i })).toBeInTheDocument();
   });
 });
 

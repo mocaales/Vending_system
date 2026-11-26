@@ -34,16 +34,16 @@ export default function OperatorsPage() {
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: 24 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="page">
+      <div className="page-header">
         <h1>Operaterji</h1>
-        <div>
+        <nav>
           <Link to="/">← Nadzorna plošča</Link>
-          <button style={{ marginLeft: 16 }} onClick={() => setShowForm(!showForm)}>
+          <button className="primary" onClick={() => setShowForm(!showForm)}>
             + Dodaj operaterja
           </button>
-        </div>
-      </header>
+        </nav>
+      </div>
 
       {showForm && (
         <CreateOperatorForm
@@ -53,39 +53,44 @@ export default function OperatorsPage() {
           }}
         />
       )}
-
       {resetTarget && <ResetPasswordForm id={resetTarget} onDone={() => setResetTarget(null)} />}
+      {loading && <p style={{ color: "var(--text-secondary)" }}>Nalagam...</p>}
 
-      {loading && <p>Nalagam...</p>}
-
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <table>
         <thead>
           <tr>
-            {["E-naslov", "Ime", "Stanje", "Dejanja"].map((h) => (
-              <th key={h} style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ccc" }}>
-                {h}
-              </th>
-            ))}
+            <th>E-naslov</th>
+            <th>Ime</th>
+            <th>Stanje</th>
+            <th>Dejanja</th>
           </tr>
         </thead>
         <tbody>
           {operators.map((op) => (
             <tr key={op.id}>
-              <td style={{ padding: 8 }}>{op.email}</td>
-              <td style={{ padding: 8 }}>{op.name}</td>
-              <td style={{ padding: 8 }}>{op.status}</td>
-              <td style={{ padding: 8 }}>
-                {op.id !== self?.id && op.status === "ACTIVE" && (
-                  <>
-                    <button onClick={() => setResetTarget(op.id)} style={{ marginRight: 8 }}>
-                      Ponastavi geslo
-                    </button>
-                    <button onClick={() => handleDeactivate(op.id)} style={{ color: "red" }}>
-                      Deaktiviraj
-                    </button>
-                  </>
-                )}
-                {op.id === self?.id && <span style={{ color: "#888" }}>Jaz</span>}
+              <td>{op.email}</td>
+              <td>{op.name}</td>
+              <td>
+                <span
+                  className={`badge ${op.status === "ACTIVE" ? "badge-active" : "badge-inactive"}`}
+                >
+                  {op.status === "ACTIVE" ? "Aktiven" : "Deaktiviran"}
+                </span>
+              </td>
+              <td>
+                <div className="flex-row">
+                  {op.id !== self?.id && op.status === "ACTIVE" && (
+                    <>
+                      <button onClick={() => setResetTarget(op.id)}>Ponastavi geslo</button>
+                      <button className="danger" onClick={() => handleDeactivate(op.id)}>
+                        Deaktiviraj
+                      </button>
+                    </>
+                  )}
+                  {op.id === self?.id && (
+                    <span style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Jaz</span>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -114,27 +119,37 @@ function CreateOperatorForm({ onCreated }: { onCreated: () => void }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ border: "1px solid #ccc", borderRadius: 8, padding: 16, marginBottom: 16 }}
-    >
-      <h3>Nov operater</h3>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      {[
-        { name: "email", type: "email", label: "E-naslov" },
-        { name: "name", type: "text", label: "Ime" },
-        { name: "password", type: "password", label: "Geslo (min. 12 znakov)" },
-      ].map((f) => (
-        <div key={f.name} style={{ marginBottom: 8 }}>
-          <label>{f.label}: </label>
-          <input name={f.name} type={f.type} required minLength={f.name === "password" ? 12 : 1} />
+    <div className="card" style={{ marginBottom: 24 }}>
+      <h2 style={{ marginBottom: 16 }}>Nov operater</h2>
+      {error && <div className="alert alert-error">{error}</div>}
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          {[
+            { name: "email", type: "email", label: "E-naslov" },
+            { name: "name", type: "text", label: "Ime" },
+            { name: "password", type: "password", label: "Geslo (min. 12 znakov)" },
+          ].map((f) => (
+            <div key={f.name} className="form-group" style={{ margin: 0 }}>
+              <label>{f.label}</label>
+              <input
+                name={f.name}
+                type={f.type}
+                required
+                minLength={f.name === "password" ? 12 : 1}
+              />
+            </div>
+          ))}
         </div>
-      ))}
-      <button type="submit">Ustvari</button>
-      <button type="button" onClick={onCreated} style={{ marginLeft: 8 }}>
-        Prekliči
-      </button>
-    </form>
+        <div className="flex-row" style={{ marginTop: 16 }}>
+          <button type="submit" className="primary">
+            Ustvari
+          </button>
+          <button type="button" className="ghost" onClick={onCreated}>
+            Prekliči
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -154,20 +169,29 @@ function ResetPasswordForm({ id, onDone }: { id: string; onDone: () => void }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{ border: "1px solid #ccc", borderRadius: 8, padding: 16, marginBottom: 16 }}
-    >
-      <h3>Ponastavitev gesla</h3>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <div style={{ marginBottom: 8 }}>
-        <label>Novo geslo (min. 12 znakov): </label>
-        <input name="newPassword" type="password" required minLength={12} />
-      </div>
-      <button type="submit">Ponastavi</button>
-      <button type="button" onClick={onDone} style={{ marginLeft: 8 }}>
-        Prekliči
-      </button>
-    </form>
+    <div className="card" style={{ marginBottom: 24 }}>
+      <h2 style={{ marginBottom: 16 }}>Ponastavitev gesla</h2>
+      {error && <div className="alert alert-error">{error}</div>}
+      <form onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label>Novo geslo (min. 12 znakov)</label>
+          <input
+            name="newPassword"
+            type="password"
+            required
+            minLength={12}
+            style={{ maxWidth: 300 }}
+          />
+        </div>
+        <div className="flex-row">
+          <button type="submit" className="primary">
+            Ponastavi
+          </button>
+          <button type="button" className="ghost" onClick={onDone}>
+            Prekliči
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
