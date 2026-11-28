@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent, InputHTMLAttributes } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   categoriesApi,
@@ -10,6 +10,7 @@ import {
   productsApi,
 } from "../api/client";
 import { getErrorMessage } from "../api/errors";
+import { Field } from "../components/Field";
 
 const errorText = (err: unknown) =>
   err instanceof GatewayError ? getErrorMessage(err.body.code) : "Napaka.";
@@ -141,24 +142,6 @@ export default function ProductsPage() {
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function Field({
-  name,
-  label,
-  defaultValue,
-  ...input
-}: {
-  name: string;
-  label: string;
-  defaultValue?: string | number;
-} & InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div className="form-group" style={{ margin: 0 }}>
-      <label htmlFor={name}>{label}</label>
-      <input id={name} name={name} defaultValue={defaultValue} {...input} />
     </div>
   );
 }
