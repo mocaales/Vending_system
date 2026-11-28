@@ -236,6 +236,14 @@ export const productsApi = {
 };
 
 // Inventory (docs/03 §7)
+// Avtomat s predali, kot ga rabita strani zaloge (machinesApi vrne unknown).
+export interface MachineWithSlots {
+  id: string;
+  name: string;
+  status: string;
+  slots: { slotCode: string; label?: string | null }[];
+}
+
 export interface SlotOut {
   machineId: string;
   slot: string;
@@ -246,7 +254,67 @@ export interface SlotOut {
   lowStockThreshold: number;
 }
 
+export interface SlotSet {
+  productId: string;
+  batchCode: string;
+  expiryDate: string;
+  quantity: number;
+  lowStockThreshold: number;
+}
+
+export interface RefillIn {
+  refillId: string; // isti refillId ne podvoji polnitve
+  machineId: string;
+  slot: string;
+  productId: string;
+  batchCode: string;
+  expiryDate: string;
+  quantity: number;
+}
+
+export type MovementType = "SET" | "REFILL" | "REMOVAL" | "SALE";
+
+export interface MovementOut {
+  id: string;
+  machineId: string;
+  slot: string;
+  type: MovementType;
+  productId: string;
+  batchCode: string | null;
+  quantity: number;
+  saleId: string | null;
+  refillId: string | null;
+  occurredAt: string;
+}
+
+export interface RemovedOut {
+  slot: string;
+  productId: string;
+  batchCode: string | null;
+  quantity: number;
+}
+
 export const inventoryApi = {
   productSlots: (productId: string) =>
     request<PageOut<SlotOut>>("GET", `/api/v1/inventory/product/${productId}`),
+  machine: (machineId: string) =>
+    request<PageOut<SlotOut>>("GET", `/api/v1/inventory/${machineId}?limit=200`),
+  setSlot: (machineId: string, slot: string, data: SlotSet) =>
+    request<SlotOut>("PUT", `/api/v1/inventory/${machineId}/${slot}`, data),
+  setThreshold: (machineId: string, slot: string, lowStockThreshold: number) =>
+    request<SlotOut>("PUT", `/api/v1/inventory/${machineId}/${slot}/threshold`, {
+      lowStockThreshold,
+    }),
+  empty: (machineId: string, slot: string) =>
+    request<void>("DELETE", `/api/v1/inventory/${machineId}/${slot}`),
+  refill: (data: RefillIn) => request<SlotOut>("POST", "/api/v1/inventory/refill", data),
+  removeExpired: (machineId: string) =>
+    request<{ removed: RemovedOut[] }>(
+      "DELETE",
+      `/api/v1/inventory/expired?machineId=${machineId}`,
+    ),
+  movements: (filters: Record<string, string>) => {
+    const params = new URLSearchParams({ ...filters, limit: "200" });
+    return request<PageOut<MovementOut>>("GET", `/api/v1/inventory/movements?${params}`);
+  },
 };

@@ -1,5 +1,6 @@
 // Lažni gateway za teste komponent: nadomesti fetch in odgovarja po tabeli
 // "METODA /pot" -> [status, telo]; vrne seznam poslanih zahtev.
+// Ključ s poizvedbo ("GET /pot?status=X") ima prednost pred ključem brez nje.
 type Answer = [number, unknown];
 export type Routes = Record<string, Answer>;
 
@@ -19,7 +20,7 @@ export function fakeGateway(routes: Routes): SentRequest[] {
       path: pathname + search,
       body: init.body ? JSON.parse(String(init.body)) : undefined,
     });
-    const answer = routes[`${method} ${pathname}`];
+    const answer = routes[`${method} ${pathname}${search}`] ?? routes[`${method} ${pathname}`];
     if (!answer) throw new Error(`fakeGateway: no route for ${method} ${pathname}`);
     const [status, body] = answer;
     return new Response(status === 204 ? null : JSON.stringify(body), { status });

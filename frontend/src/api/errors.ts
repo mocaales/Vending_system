@@ -21,6 +21,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   CATEGORY_NAME_TAKEN: "Kategorija s tem imenom že obstaja.",
   CATEGORY_IN_USE: "Kategorije ni mogoče izbrisati, ker jo uporablja izdelek (tudi arhiviran).",
   REFERENCE_NOT_FOUND: "Povezan zapis (npr. kategorija ali izdelek) ne obstaja.",
+  SLOT_NOT_FOUND: "Predal še ni nastavljen.",
+  SLOT_NOT_EMPTY: "V predalu je drug izdelek. Predal najprej izpraznite.",
+  SLOT_HAS_OTHER_BATCH:
+    "V predalu je druga serija. Predal najprej izpraznite ali uporabite isto serijo.",
+  REFILL_ID_CONFLICT: "Ta polnitev je že zabeležena z drugimi podatki.",
   DEPENDENCY_UNAVAILABLE: "Storitev trenutno ni dosegljiva.",
   UPSTREAM_TIMEOUT: "Storitev se ne odziva.",
   INTERNAL_ERROR: "Prišlo je do napake na strežniku.",

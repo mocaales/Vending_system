@@ -12,6 +12,8 @@ import ThresholdsPage from "./pages/ThresholdsPage";
 import ClosingsPage from "./pages/ClosingsPage";
 import ProductsPage from "./pages/ProductsPage";
 import CategoriesPage from "./pages/CategoriesPage";
+import InventoryPage from "./pages/InventoryPage";
+import MovementsPage from "./pages/MovementsPage";
 
 export default function App() {
   return (
@@ -89,6 +91,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CategoriesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute>
+                <InventoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory/movements"
+            element={
+              <ProtectedRoute>
+                <MovementsPage />
               </ProtectedRoute>
             }
           />
