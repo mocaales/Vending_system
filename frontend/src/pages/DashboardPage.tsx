@@ -31,6 +31,7 @@ export default function DashboardPage() {
           </span>
           <Link to="/map">Zemljevid</Link>
           <Link to="/machines">Avtomati</Link>
+          <Link to="/products">Izdelki</Link>
           <Link to="/operators">Operaterji</Link>
           <Link to="/closings">Zaključki</Link>
           <button className="ghost" onClick={logout}>

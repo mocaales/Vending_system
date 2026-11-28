@@ -186,3 +186,67 @@ export const machinesApi = {
   deleteKey: (machineId: string, keyId: string) =>
     request<void>("DELETE", `/api/v1/machines/${machineId}/keys/${keyId}`),
 };
+
+// Categories and products (Product, docs/03 §6)
+export interface CategoryIn {
+  name: string;
+  description?: string;
+}
+
+export interface CategoryOut {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export interface ProductIn {
+  name: string;
+  categoryId: string;
+  referencePrice: string;
+  currency: string;
+  weightGrams: number;
+  allergens: string[];
+  imageUrl: string;
+}
+
+export interface ProductOut extends ProductIn {
+  id: string;
+  categoryName: string;
+  status: "ACTIVE" | "ARCHIVED";
+}
+
+export const categoriesApi = {
+  list: () => request<PageOut<CategoryOut>>("GET", "/api/v1/categories?limit=200"),
+  create: (data: CategoryIn) => request<CategoryOut>("POST", "/api/v1/categories", data),
+  update: (id: string, data: CategoryIn) =>
+    request<CategoryOut>("PUT", `/api/v1/categories/${id}`, data),
+  remove: (id: string) => request<void>("DELETE", `/api/v1/categories/${id}`),
+};
+
+export const productsApi = {
+  list: (status: string, q = "") => {
+    const params = new URLSearchParams({ status, limit: "200" });
+    if (q) params.set("q", q);
+    return request<PageOut<ProductOut>>("GET", `/api/v1/products?${params}`);
+  },
+  create: (data: ProductIn) => request<ProductOut>("POST", "/api/v1/products", data),
+  update: (id: string, data: ProductIn) =>
+    request<ProductOut>("PUT", `/api/v1/products/${id}`, data),
+  archive: (id: string) => request<void>("DELETE", `/api/v1/products/${id}`),
+};
+
+// Inventory (docs/03 §7)
+export interface SlotOut {
+  machineId: string;
+  slot: string;
+  productId: string | null;
+  batchCode: string | null;
+  expiryDate: string | null;
+  quantity: number;
+  lowStockThreshold: number;
+}
+
+export const inventoryApi = {
+  productSlots: (productId: string) =>
+    request<PageOut<SlotOut>>("GET", `/api/v1/inventory/product/${productId}`),
+};
