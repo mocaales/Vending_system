@@ -10,6 +10,8 @@ import MachineKeysPage from "./pages/MachineKeysPage";
 import OperatorsPage from "./pages/OperatorsPage";
 import ThresholdsPage from "./pages/ThresholdsPage";
 import ClosingsPage from "./pages/ClosingsPage";
+import ProductsPage from "./pages/ProductsPage";
+import CategoriesPage from "./pages/CategoriesPage";
 
 export default function App() {
   return (
@@ -71,6 +73,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ClosingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/products"
+            element={
+              <ProtectedRoute>
+                <ProductsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
+              <ProtectedRoute>
+                <CategoriesPage />
               </ProtectedRoute>
             }
           />
