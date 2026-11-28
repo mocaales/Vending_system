@@ -1,33 +1,13 @@
 """Koraki smoke testa (issue #36); gateway nadomesti httpx.MockTransport, brez Compose."""
 
-import json
-
 import httpx
 import pytest
 import smoke_test
+from fake_gateway import FakeGateway
 from smoke_test import SmokeError
 
 MACHINE_ID = "0d9c4a52-3b1e-4f6a-8c27-91e5a7b3d410"
 PRODUCT = {"id": "c3a8f7d4-12ab-4e55-b6c9-5d0e8a1f2b73", "referencePrice": "1.20"}
-
-
-class FakeGateway:
-    """Odgovori po tabeli (metoda, pot) -> (status, telo); seznam pomeni zaporedne odgovore."""
-
-    def __init__(self, routes):
-        self.routes = routes
-        self.requests = []
-
-    def handle(self, request: httpx.Request) -> httpx.Response:
-        self.requests.append(request)
-        answer = self.routes[(request.method, request.url.path)]
-        if isinstance(answer, list):
-            answer = answer.pop(0) if len(answer) > 1 else answer[0]
-        status, body = answer
-        return httpx.Response(status, json=body)
-
-    def sent(self, index):
-        return json.loads(self.requests[index].content)
 
 
 @pytest.fixture(autouse=True)
